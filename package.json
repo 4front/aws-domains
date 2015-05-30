@@ -1,0 +1,35 @@
+{
+  "name": "4front-aws-domains",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --reporter spec --bail --check-leaks test/",
+    "test-cov": "istanbul cover node_modules/mocha/bin/_mocha -- --reporter dot --check-leaks test/",
+    "test-travis": "istanbul cover node_modules/mocha/bin/_mocha --report lcovonly -- --reporter spec --check-leaks test/"
+  },
+  "author": "David Von Lehman <https://github.com/dvonlehman>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/4front/aws-domains"
+  },
+  "licenses": [
+    {
+      "type": "Apache-2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+    }
+  ],
+  "dependencies": {
+    "async": "^1.0.0",
+    "aws-sdk": "^2.1.32",
+    "debug": "^2.2.0",
+    "lodash": "^3.9.3",
+    "shortid": "^2.2.2",
+    "simple-errors": "^1.0.1"
+  },
+  "devDependencies": {
+    "istanbul": "^0.3.14",
+    "mocha": "^2.2.5",
+    "sinon": "^1.14.1"
+  }
+}
