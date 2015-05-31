@@ -25,26 +25,79 @@ DomainManager.prototype.register = function(domainName, callback) {
   var i = 0;
   var distribution = null;
 
+  this._findDistribution(self._settings.cloudFrontDistributions, function(distro) {
+    return distro.DistributionConfig.Aliases.Quantity < self._settings.maxAliasesPerDistribution;
+  }, function(err, distro) {
+    if (err) return callback(err);
+
+    if (!distro)
+      return callback(new Error("No CloudFront distributions with available CNAME aliases"));
+
+    var aliases = distro.Distribution.DistributionConfig.Aliases;
+    aliases.Items.push(domainName);
+    aliases.Quantity += 1;
+
+    self._updateDistribution(distro, callback);
+  });
+};
+
+DomainManager.prototype.unregister = function(domainName, distributionId, callback) {
+  var self = this;
+
+  debug("unregister the CNAME %s", domainName);
+  // Load the distribution
+
+  // If a distributionId was specified, just search that one. Otherwise
+  // scan through all of them until one is found that contains the CNAME.
+  var distributionsToSearch;
+  if (distributionId)
+    distributionsToSearch = [distributionId];
+  else
+    distributionsToSearch = this._settings.cloudFrontDistributions;
+
+  function test(distro) {
+    // Check if this distribution contains the specified CNAME
+    return _.indexOf(distro.DistributionConfig.Aliases.Items, domainName) !== -1;
+  }
+
+  this._findDistribution(distributionsToSearch, test, function(err, distro) {
+    if (err) return callback(err);
+
+    if (!distro) {
+      debug("did not find domain %s to unregister", domainName);
+      return callback();
+    }
+
+    var aliases = distro.Distribution.DistributionConfig.Aliases;
+    var index = _.indexOf(aliases.Items, domainName);
+    if (index === -1)
+      return callback();
+
+    _.pullAt(aliases.Items, index);
+    aliases.Quantity = aliases.Items.length;
+
+    self._updateDistribution(distro, callback);
+  });
+};
+
+DomainManager.prototype._findDistribution = function(distributionIds, test, callback) {
+  var self = this;
+
+  var found = null;
+  var i = 0;
   var whileTest = function() {
-    return distribution === null && i < self._settings.cloudFrontDistributions.length;
+    return found === null && i < distributionIds.length;
   };
 
   async.whilst(whileTest, function(cb) {
-    self._cloudFront.getDistribution({Id: self._settings.cloudFrontDistributions[i]}, function(err, distro) {
+    self._cloudFront.getDistribution({Id: distributionIds[i]}, function(err, distro) {
       if (err) return cb(err);
 
-      var aliases = distro.Distribution.DistributionConfig.Aliases;
+      if (!distro)
+        return callback(Error.create("No distribution with id " + distributionIds[i], {code: "invalidDistribution"}));
 
-      // Check if this domain name already exists
-      if (aliases.Items.indexOf(domainName) !== -1)
-        return cb(Error.create("The domain name " + domainName + " is already registered in distribution " + distro.Distribution.Id, {code: "domainAlredyRegistered"}));
-
-      // If this distribution is not maxed out on CNAMEs, return
-      if (aliases.Quantity < self._settings.maxAliasesPerDistribution) {
-        aliases.Items.push(domainName);
-        aliases.Quantity += 1;
-        distribution = distro;
-      }
+      if (test(distro.Distribution))
+        found = distro;
 
       i++;
       cb();
@@ -52,36 +105,9 @@ DomainManager.prototype.register = function(domainName, callback) {
   }, function(err) {
     if (err) return callback(err);
 
-    if (!distribution)
-      return callback(new Error("No CloudFront distributions with available CNAME aliases"));
-
-    // Finally update the distribution
-    self._updateDistribution(distribution, callback);
+    callback(null, found);
   });
-
-  DomainManager.prototype.unregister = function(domainName, distributionId, callback) {
-    var self = this;
-
-    debug("unregister the CNAME %s", domainName);
-    // Load the distribution
-    this._cloudFront.getDistribution({Id: distributionId}, function(err, distribution) {
-      if (err) return callback(err);
-
-      if (!distribution)
-        return callback(Error.create("No distribution with id " + distributionId, {code: "invalidDistribution"}));
-
-      var aliases = distribution.Distribution.DistributionConfig.Aliases;
-      var index = _.indexOf(aliases.Items, domainName);
-      if (index === -1)
-        return callback();
-
-      _.pullAt(aliases.Items, index);
-      aliases.Quantity = aliases.Items.length;
-
-      self._updateDistribution(distribution, callback);
-    });
-  };
-};
+}
 
 DomainManager.prototype._updateDistribution = function(distribution, callback) {
   // Finally update the distribution
