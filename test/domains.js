@@ -47,7 +47,7 @@ describe('AwsDomainManager', function() {
     });
 
     this.domainManager = new DomainManager({
-      distributions: _.map(self.distributions, function(d) {
+      cloudFrontDistributions: _.map(self.distributions, function(d) {
         return d.Distribution.Id;
       }),
       maxAliasesPerDistribution: 3

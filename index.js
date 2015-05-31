@@ -8,12 +8,12 @@ require('simple-errors');
 
 module.exports = DomainManager = function(settings) {
   this._cloudFront = new AWS.CloudFront();
-  this._settings = settings;
 
   // The default limit on CNAMEs for a CloudFront distribution is 200
   // However it should be possible to request more.
-  if (!this._settings.maxAliasesPerDistribution)
-    this._settings.maxAliasesPerDistribution = 200;
+  this._settings = _.defaults({}, settings, {
+    maxAliasesPerDistribution: 200
+  });
 };
 
 DomainManager.prototype.register = function(domainName, callback) {
@@ -26,11 +26,11 @@ DomainManager.prototype.register = function(domainName, callback) {
   var distribution = null;
 
   var whileTest = function() {
-    return distribution === null && i < self._settings.distributions.length;
+    return distribution === null && i < self._settings.cloudFrontDistributions.length;
   };
 
   async.whilst(whileTest, function(cb) {
-    self._cloudFront.getDistribution({Id: self._settings.distributions[i]}, function(err, distro) {
+    self._cloudFront.getDistribution({Id: self._settings.cloudFrontDistributions[i]}, function(err, distro) {
       if (err) return cb(err);
 
       var aliases = distro.Distribution.DistributionConfig.Aliases;
