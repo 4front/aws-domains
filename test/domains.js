@@ -29,8 +29,8 @@ describe('AwsDomainManager', function() {
 
     this.cloudFrontStub = {
       getDistribution: sinon.spy(function(params, callback) {
-        var distribution = _.find(self.distributions, function(d) {
-          return d.Distribution.Id === params.Id;
+        var distribution = _.find(self.distributions, function(distro) {
+          return distro.Distribution.Id === params.Id;
         });
 
         callback(null, distribution);
@@ -47,8 +47,8 @@ describe('AwsDomainManager', function() {
     });
 
     this.domainManager = new DomainManager({
-      cloudFrontDistributions: _.map(self.distributions, function(d) {
-        return d.Distribution.Id;
+      cloudFrontDistributions: _.map(self.distributions, function(distro) {
+        return distro.Distribution.Id;
       }),
       maxAliasesPerDistribution: 3
     });
@@ -59,7 +59,7 @@ describe('AwsDomainManager', function() {
   });
 
   it('creates CNAME alias in first available distribution', function(done) {
-    this.domainManager.register("test.mydomain.com", function(err, distributionId) {
+    this.domainManager.register('test.mydomain.com', function(err, distributionId) {
       if (err) return done(err);
 
       assert.equal(1, self.cloudFrontStub.getDistribution.callCount);
@@ -71,7 +71,7 @@ describe('AwsDomainManager', function() {
 
       var updatedDistribution = self.cloudFrontStub.updateDistribution.getCall(0).args[0];
       assert.deepEqual(updatedDistribution.DistributionConfig.Aliases, {
-        Items: ["test.mydomain.com"],
+        Items: ['test.mydomain.com'],
         Quantity: 1
       });
 
@@ -90,11 +90,11 @@ describe('AwsDomainManager', function() {
 
     firstDistro.Aliases.Quantity = 3;
 
-    this.domainManager.register("test.mydomain.com", function(err, distributionId) {
+    this.domainManager.register('test.mydomain.com', function(err, distributionId) {
       if (err) return done(err);
 
-      var distroIds = _.map(self.distributions, function(d) {
-        return d.Distribution.Id;
+      var distroIds = _.map(self.distributions, function(distro) {
+        return distro.Distribution.Id;
       });
 
       assert.equal(2, self.cloudFrontStub.getDistribution.callCount);
