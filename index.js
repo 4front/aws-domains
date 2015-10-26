@@ -1,6 +1,8 @@
 var AWS = require('aws-sdk');
 var async = require('async');
 var _ = require('lodash');
+var x509 = require('x509');
+var distributionConfig = require('./lib/distribution-config');
 var debug = require('debug')('4front:aws-domains');
 
 require('simple-errors');
@@ -10,6 +12,7 @@ module.exports = DomainManager;
 function DomainManager(settings) {
   this._cloudFront = new AWS.CloudFront();
   this._iam = new AWS.IAM();
+  this._settings = settings;
 
   // The default limit on CNAMEs for a CloudFront distribution is 200
   // However it should be possible to request more.
@@ -18,28 +21,30 @@ function DomainManager(settings) {
   });
 }
 
-DomainManager.prototype.register = function(domainName, callback) {
+DomainManager.prototype.register = function(domainName, zoneId, callback) {
   var self = this;
+  var distributionId = zoneId;
 
   debug('register domain %s', domainName);
 
-  // Cycle through the list of domains looking for one with availability.
+  async.waterfall([
+    function(cb) {
+      // If a dedicated distributionId is specified, get that distribution. Otherwise find a shared
+      // distribution with available CNAME slots.
+      if (distributionId) {
+        self._getDistribution(distributionId, cb);
+      } else {
+        self._findNonSslDistribution(cb);
+      }
+    },
+    function(distro, cb) {
+      var aliases = distro.Distribution.DistributionConfig.Aliases;
+      aliases.Items.push(domainName);
+      aliases.Quantity += 1;
 
-  this._findDistribution(self._settings.cloudFrontDistributions, function(distro) {
-    return distro.DistributionConfig.Aliases.Quantity < self._settings.maxAliasesPerDistribution;
-  }, function(err, distro) {
-    if (err) return callback(err);
-
-    if (!distro) {
-      return callback(new Error('No CloudFront distributions with available CNAME aliases'));
+      self._updateDistribution(distro, cb);
     }
-
-    var aliases = distro.Distribution.DistributionConfig.Aliases;
-    aliases.Items.push(domainName);
-    aliases.Quantity += 1;
-
-    self._updateDistribution(distro, callback);
-  });
+  ], callback);
 };
 
 DomainManager.prototype.unregister = function(domainName, distributionId, callback) {
@@ -81,42 +86,129 @@ DomainManager.prototype.unregister = function(domainName, distributionId, callba
   });
 };
 
-// DomainManager.prototype.uploadServerCertificate = function(orgId, certificate, callback) {
-//   var params = {
-//     Path: '/cloudfront/' + certificate.domain,
-//     ServerCertificateName: '',
-//     CertificateBody: '',
-//     PrivateKey: '',
-//     CertificateChain: '',
-//   };
-//
-  // Need to create a new CloudFront distribution in order to attach the SSL cert to it.
-  // Manage domains at the account level rather than the app level, then attach a custom domain
-  // to an app?
+DomainManager.prototype.getCertificateStatus = function(certificate, callback) {
+  this._cloudFront.getDistribution({
+    Id: certificate.zone
+  }, function(err, data) {
+    if (err) return callback(err);
 
-  // Transfer matching domains to this distribution?
+    callback(null, data.Distribution.Status);
+  });
+};
 
-  // 1) upload certificate to IAM
-  // 2) create new distribution specifying the ID of the cert
-  // 3) Create a new certificates table in Dynamo with name, orgId, and certificateId columns.
-  // 3) Add a certificateId and orgId columns to the domain table
-  // 4) Create a domain management screen at the account level where users
-  // create domains, change which apps domains point to, and assign domains
-  // to an SSL Cluster or whatever we want to call it.
+// Transfer domain from one zone to another zone. If the targetZone is null, then
+// find the first available zone for non-SSL domains.
+DomainManager.prototype.transferDomain = function(domainName, currentZone, targetZone, callback) {
+  var currentDistributionId = currentZone;
+  var targetDistributionId = targetZone;
 
-  // var self = this;
-  // async.waterfall([
-  //   function(cb) {
-  //     self._iam.uploadServerCertificate(params, cb);
-  //   },
-  //   function(certResult, cb) {
-  //     var certId = certResult.ServerCertificateId;
-  //     var certArn = certResult.Arn;
-  //
-  //     // self._cloudFront.
-  //   }
-  // ], callback);
-// };
+  var self = this;
+
+  async.series([
+    function(cb) {
+      self.unregister(domainName, currentDistributionId, cb);
+    },
+    function(cb) {
+      self.register(domainName, targetDistributionId, cb);
+    }
+  ], callback);
+};
+
+DomainManager.prototype.uploadServerCertificate = function(certificate, callback) {
+  var self = this;
+
+  // Parse the public key
+  var certMetadata;
+  try {
+    certMetadata = x509.parseCert(certificate.certificateBody);
+  } catch (err) {
+    return callback(Error.create('Could not parse certificate body', {code: 'invalidCertificate'}));
+  }
+
+  certificate.name = certMetadata.subject.commonName;
+  if (_.isArray(certMetadata.altNames)) {
+    certificate.altNames = certMetadata.altNames;
+  }
+
+  async.series([
+    function(cb) {
+      debug('create certificate', certificate.name);
+      var params = {
+        Path: '/cloudfront/' + self._settings.serverCertificatePathPrefix + certificate.name + '/',
+        ServerCertificateName: certificate.name,
+        CertificateBody: certificate.certificateBody,
+        PrivateKey: certificate.privateKey,
+        CertificateChain: certificate.certificateChain
+      };
+
+      self._iam.uploadServerCertificate(params, function(err, data) {
+        if (err) return cb(err);
+
+        debug('created certificate', JSON.stringify(data));
+
+        _.extend(certificate, {
+          certificateId: data.ServerCertificateMetadata.ServerCertificateId,
+          expires: new Date(data.ServerCertificateMetadata.Expiration),
+          uploadDate: new Date(data.ServerCertificateMetadata.UploadDate)
+        });
+
+        cb(null);
+      });
+    },
+    function(cb) {
+      // Create a new CloudFront distribution
+      debug('creating cloudfront distribution');
+      self._cloudFront.createDistribution(distributionConfig(self._settings, certificate), function(err, data) {
+        if (err) return cb(err);
+
+        _.extend(certificate, {
+          zone: data.Distribution.Id,
+          status: data.Distribution.Status
+        });
+
+        debug('cloudfront distribution created', data.Distribution.Id);
+        cb();
+      });
+    }
+  ], function(err) {
+    if (err) {
+      // if (err.code === 'MalformedCertificate' && err.message.indexOf('Unable to validate certificate chain'))
+      // if (err.code === 'EntityAlreadyExists' && err.message.indexOf('Server Certificate'))
+      return callback(err);
+    }
+    callback(null, certificate);
+  });
+};
+
+// Find one of the shared non-SSL CloudFront distributions that has available
+// slots for a CNAME alias.
+DomainManager.prototype._findNonSslDistribution = function(callback) {
+  var self = this;
+  this._findDistribution(this._settings.cloudFrontDistributions, function(distro) {
+    return distro.DistributionConfig.Aliases.Quantity < self._settings.maxAliasesPerDistribution;
+  }, function(err, distro) {
+    if (!distro) {
+      return callback(new Error('No CloudFront distributions with available CNAME aliases'));
+    }
+
+    callback(null, distro);
+  });
+};
+
+DomainManager.prototype._getDistribution = function(distributionId, callback) {
+  debug('get cloudfront distribution', distributionId);
+  this._cloudFront.getDistribution({Id: distributionId}, function(err, distro) {
+    if (err) return callback(err);
+
+    if (!distro) {
+      return callback(Error.create('No distribution with id ' + distributionId, {
+        code: 'invalidDistribution'
+      }));
+    }
+
+    callback(null, distro);
+  });
+};
 
 DomainManager.prototype._findDistribution = function(distributionIds, test, callback) {
   var self = this;
@@ -128,14 +220,8 @@ DomainManager.prototype._findDistribution = function(distributionIds, test, call
   };
 
   async.whilst(whileTest, function(cb) {
-    self._cloudFront.getDistribution({Id: distributionIds[i]}, function(err, distro) {
+    self._getDistribution(distributionIds[i], function(err, distro) {
       if (err) return cb(err);
-
-      if (!distro) {
-        return callback(Error.create('No distribution with id ' + distributionIds[i], {
-          code: 'invalidDistribution'
-        }));
-      }
 
       if (test(distro.Distribution)) {
         found = distro;
@@ -152,6 +238,8 @@ DomainManager.prototype._findDistribution = function(distributionIds, test, call
 };
 
 DomainManager.prototype._updateDistribution = function(distribution, callback) {
+  debug('update distribution', distribution.Id);
+
   // Finally update the distribution
   this._cloudFront.updateDistribution({
     Id: distribution.Distribution.Id,

@@ -25,13 +25,16 @@
     "debug": "^2.2.0",
     "lodash": "^3.9.3",
     "shortid": "^2.2.2",
-    "simple-errors": "^1.0.1"
+    "simple-errors": "^1.0.1",
+    "x509": "^0.2.2"
   },
   "devDependencies": {
+    "dash-assert": "^1.0.3",
     "eslint": "^1.6.0",
     "eslint-config-4front": "4front/eslint-config-4front",
     "istanbul": "^0.3.14",
     "mocha": "^2.2.5",
+    "mock-aws": "^1.2.2",
     "sinon": "^1.14.1"
   }
 }
