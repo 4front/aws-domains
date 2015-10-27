@@ -249,6 +249,7 @@ describe('AwsDomainManager', function() {
       this.certificate.certificateBody = 'invalid_cert_body';
       this.domainManager.uploadCertificate(this.certificate, function(err) {
         assert.equal(err.code, 'malformedCertificate');
+        assert.isTrue(err.badRequest);
         done();
       });
     });
@@ -262,6 +263,7 @@ describe('AwsDomainManager', function() {
 
       this.domainManager.uploadCertificate(this.certificate, function(err) {
         assert.equal(err.code, 'malformedCertificate');
+        assert.isTrue(err.badRequest);
         done();
       });
     });

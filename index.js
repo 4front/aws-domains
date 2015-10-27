@@ -122,7 +122,10 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
   try {
     certMetadata = x509.parseCert(certificate.certificateBody);
   } catch (err) {
-    return callback(Error.create('Could not parse certificate body', {code: 'malformedCertificate'}));
+    return callback(Error.create('Could not parse certificate body', {
+      code: 'malformedCertificate',
+      badRequest: true
+    }));
   }
 
   certificate.commonName = certMetadata.subject.commonName;
@@ -183,14 +186,16 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
     if (err) {
       if (err.code === 'MalformedCertificate' && err.message.indexOf('Unable to validate certificate chain') >= 0) {
         return callback(Error.create('Invalid certificate', {
-          code: 'malformedCertificate'
+          code: 'malformedCertificate',
+          badRequest: true
         }));
       }
 
       if (err.code === 'EntityAlreadyExists' && err.message.indexOf('Server Certificate') >= 0) {
         return callback(Error.create('Certficate already exists', {
           code: 'certificateExists',
-          certDomain: certificate.commonName
+          certDomain: certificate.commonName,
+          badRequest: true
         }));
       }
 
