@@ -104,17 +104,17 @@ DomainManager.prototype.transferDomain = function(domainName, currentZone, targe
 
   var self = this;
 
-  async.series([
+  async.waterfall([
     function(cb) {
       self.unregister(domainName, currentDistributionId, cb);
     },
-    function(cb) {
+    function(distro, cb) {
       self.register(domainName, targetDistributionId, cb);
     }
   ], callback);
 };
 
-DomainManager.prototype.uploadServerCertificate = function(certificate, callback) {
+DomainManager.prototype.uploadCertificate = function(certificate, callback) {
   var self = this;
 
   // Parse the public key
@@ -172,12 +172,26 @@ DomainManager.prototype.uploadServerCertificate = function(certificate, callback
     }
   ], function(err) {
     if (err) {
-      // if (err.code === 'MalformedCertificate' && err.message.indexOf('Unable to validate certificate chain'))
-      // if (err.code === 'EntityAlreadyExists' && err.message.indexOf('Server Certificate'))
+      if (err.code === 'MalformedCertificate' && err.message.indexOf('Unable to validate certificate chain') >= 0) {
+        return callback(Error.create('Invalid certificate', {
+          code: 'malformedCertificate'
+        }));
+      }
+
+      if (err.code === 'EntityAlreadyExists' && err.message.indexOf('Server Certificate') >= 0) {
+        return callback(Error.create('Certficate already exists', {
+          code: 'certificateExists'
+        }));
+      }
+
       return callback(err);
     }
     callback(null, certificate);
   });
+};
+
+DomainManager.prototype.deleteCertificate = function(certName, callback) {
+  this._iam.deleteServerCertificate({ServerCertificateName: certName}, callback);
 };
 
 // Find one of the shared non-SSL CloudFront distributions that has available

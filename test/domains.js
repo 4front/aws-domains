@@ -139,17 +139,18 @@ describe('AwsDomainManager', function() {
     });
   });
 
-  // it('throws error if domain already registered', function(done) {
-  //   this.distributions[0].Distribution.DistributionConfig.Aliases = {
-  //     Items: ['one.domain.com', 'two.domain.com', 'three.domain.com'],
-  //     Quantity: 3
-  //   };
-  //
-  //   this.domainManager.register('two.domain.com', function(err) {
-  //     assert.equal(err.code, "domainAlredyRegistered");
-  //     done();
-  //   });
-  // });
+  it('throws error if domain already registered', function(done) {
+    this.cloudFrontStub.updateDistribution = function(params, callback) {
+      callback(Error.create('No duplicates allowed', {
+        code: 'InvalidArgument'
+      }));
+    };
+
+    this.domainManager.register('two.domain.com', null, function(err) {
+      assert.equal(err.code, 'CNAMEAlreadyExists');
+      done();
+    });
+  });
 
   it('unregisters domain', function(done) {
     this.distributions[1].Distribution.DistributionConfig.Aliases = {
@@ -172,36 +173,36 @@ describe('AwsDomainManager', function() {
     });
   });
 
-  describe('uploadServerCertificate', function() {
+  describe('uploadCertificate', function() {
     beforeEach(function() {
       self = this;
-    });
 
-    it('upload valid certificate', function(done) {
-      var commonName = 'www.jsngin.com';
+      this.commonName = 'www.jsngin.com';
       var certificateBody = fs.readFileSync(path.join(__dirname, './mock-data/cert.key')).toString();
       // Only the certificateBody has to be valid for the unit test.
-      var certificate = {
+      this.certificate = {
         orgId: this.orgId,
         certificateBody: certificateBody,
         privateKey: '-----BEGIN RSA PRIVATE KEY-----\nMIIEpQIBAAKCAQEAyFI8vGS8rGbI\n-----END RSA PRIVATE KEY-----',
         certificateChain: '-----BEGIN CERTIFICATE-----\nMIIF2TCCA8GgAwIBAgIHFxU9nqs\n-----END CERTIFICATE-----'
       };
+    });
 
+    it('upload valid certificate', function(done) {
       this.createdDistribution = {
         Id: shortid.generate(),
         Status: 'InProgress'
       };
 
-      this.domainManager.uploadServerCertificate(certificate, function(err, uploadedCert) {
+      this.domainManager.uploadCertificate(this.certificate, function(err, uploadedCert) {
         if (err) return done(err);
 
         assert.isTrue(self.iamStub.uploadServerCertificate.calledWith({
-          CertificateBody: certificate.certificateBody,
-          ServerCertificateName: commonName,
-          Path: '/cloudfront/' + self.domainManagerSettings.serverCertificatePathPrefix + commonName + '/',
-          PrivateKey: certificate.privateKey,
-          CertificateChain: certificate.certificateChain
+          CertificateBody: self.certificate.certificateBody,
+          ServerCertificateName: self.commonName,
+          Path: '/cloudfront/' + self.domainManagerSettings.serverCertificatePathPrefix + self.commonName + '/',
+          PrivateKey: self.certificate.privateKey,
+          CertificateChain: self.certificate.certificateChain
         }));
 
         assert.isTrue(self.cloudFrontStub.createDistribution.called);
@@ -213,6 +214,40 @@ describe('AwsDomainManager', function() {
 
         assert.equal(uploadedCert.expires.getTime(), new Date(self.certificateMetadata.Expiration).getTime());
 
+        done();
+      });
+    });
+
+    it('un-parseable x509 cert body', function(done) {
+      this.certificate.certificateBody = 'invalid_cert_body';
+      this.domainManager.uploadCertificate(this.certificate, function(err) {
+        assert.equal(err.code, 'invalidCertificate');
+        done();
+      });
+    });
+
+    it('invalid certificate chain', function(done) {
+      this.iamStub.uploadServerCertificate = function(params, callback) {
+        callback(Error.create('Unable to validate certificate chain', {
+          code: 'MalformedCertificate'
+        }));
+      };
+
+      this.domainManager.uploadCertificate(this.certificate, function(err) {
+        assert.equal(err.code, 'malformedCertificate');
+        done();
+      });
+    });
+
+    it('certificate already exists', function(done) {
+      this.iamStub.uploadServerCertificate = function(params, callback) {
+        callback(Error.create('Server Certificate', {
+          code: 'EntityAlreadyExists'
+        }));
+      };
+
+      this.domainManager.uploadCertificate(this.certificate, function(err) {
+        assert.equal(err.code, 'certificateExists');
         done();
       });
     });
@@ -229,9 +264,10 @@ describe('AwsDomainManager', function() {
         Items: [domainName]
       };
 
-      self.domainManager.transferDomain(domainName, currentDistributionId, targetDistributionId, function(err) {
+      self.domainManager.transferDomain(domainName, currentDistributionId, targetDistributionId, function(err, newDistributionId) {
         if (err) return done(err);
 
+        assert.equal(newDistributionId, targetDistributionId);
         assert.equal(self.cloudFrontStub.getDistribution.callCount, 2);
         assert.equal(self.cloudFrontStub.updateDistribution.callCount, 2);
 
@@ -244,6 +280,20 @@ describe('AwsDomainManager', function() {
         assert.notEqual(targetUpdateConfig.Aliases.Items.indexOf(domainName), -1);
         done();
       });
+    });
+  });
+
+  it('delete certificate', function(done) {
+    this.iamStub.deleteServerCertificate = sinon.spy(function(params, callback) {
+      callback();
+    });
+
+    var certName = 'www.domain.com';
+    this.domainManager.deleteCertificate(certName, function(err) {
+      if (err) return done(err);
+
+      assert.isTrue(self.iamStub.deleteServerCertificate.calledWith({ServerCertificateName: certName}));
+      done();
     });
   });
 });
