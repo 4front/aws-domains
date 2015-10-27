@@ -178,7 +178,7 @@ describe('AwsDomainManager', function() {
       self = this;
 
       this.commonName = 'www.jsngin.com';
-      var certificateBody = fs.readFileSync(path.join(__dirname, './mock-data/cert.key')).toString();
+      var certificateBody = fs.readFileSync(path.join(__dirname, './fixtures/cert.key')).toString();
       // Only the certificateBody has to be valid for the unit test.
       this.certificate = {
         orgId: this.orgId,
@@ -211,8 +211,35 @@ describe('AwsDomainManager', function() {
         assert.equal(1, distributionConfig.Origins.Quantity);
         assert.equal(1, distributionConfig.Origins.Items.length);
         assert.equal(self.domainManagerSettings.cloudFrontOriginDomain, distributionConfig.Origins.Items[0].DomainName);
-
+        assert.equal(self.commonName, uploadedCert.commonName);
+        assert.equal(self.commonName, uploadedCert.name);
         assert.equal(uploadedCert.expires.getTime(), new Date(self.certificateMetadata.Expiration).getTime());
+
+        done();
+      });
+    });
+
+    it('upload wildcard cert', function(done) {
+      this.commonName = '*.testdomain.com';
+      this.certificate.certificateBody = fs.readFileSync(path.join(__dirname, './fixtures/wildcard.key')).toString();
+
+      this.createdDistribution = {
+        Id: shortid.generate(),
+        Status: 'InProgress'
+      };
+
+      this.domainManager.uploadCertificate(this.certificate, function(err, uploadedCert) {
+        if (err) return done(err);
+
+        var uploadCertArg = self.iamStub.uploadServerCertificate.getCall(0).args[0];
+        assert.equal(uploadCertArg.CertificateBody, self.certificate.certificateBody);
+        assert.equal(uploadCertArg.ServerCertificateName, '@.testdomain.com');
+        assert.equal(uploadCertArg.Path, '/cloudfront/' + self.domainManagerSettings.serverCertificatePathPrefix + self.commonName + '/');
+        assert.isTrue(self.cloudFrontStub.createDistribution.called);
+        assert.equal(self.commonName, uploadedCert.commonName);
+
+        // The cert name should have replaced the '*' with an '@'
+        assert.equal('@.testdomain.com', uploadedCert.name);
 
         done();
       });
@@ -221,7 +248,7 @@ describe('AwsDomainManager', function() {
     it('un-parseable x509 cert body', function(done) {
       this.certificate.certificateBody = 'invalid_cert_body';
       this.domainManager.uploadCertificate(this.certificate, function(err) {
-        assert.equal(err.code, 'invalidCertificate');
+        assert.equal(err.code, 'malformedCertificate');
         done();
       });
     });
@@ -242,12 +269,13 @@ describe('AwsDomainManager', function() {
     it('certificate already exists', function(done) {
       this.iamStub.uploadServerCertificate = function(params, callback) {
         callback(Error.create('Server Certificate', {
-          code: 'EntityAlreadyExists'
+          code: 'EntityAlreadyExists',
         }));
       };
 
       this.domainManager.uploadCertificate(this.certificate, function(err) {
         assert.equal(err.code, 'certificateExists');
+        assert.equal(err.certDomain, 'www.jsngin.com');
         done();
       });
     });

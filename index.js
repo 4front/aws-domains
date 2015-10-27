@@ -122,10 +122,19 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
   try {
     certMetadata = x509.parseCert(certificate.certificateBody);
   } catch (err) {
-    return callback(Error.create('Could not parse certificate body', {code: 'invalidCertificate'}));
+    return callback(Error.create('Could not parse certificate body', {code: 'malformedCertificate'}));
   }
 
-  certificate.name = certMetadata.subject.commonName;
+  certificate.commonName = certMetadata.subject.commonName;
+
+  // If this is a wildcard certificate starting with a *, replace the asterisk
+  // with an @ symbol since IAM will not accept a certs with * in the name.
+  if (certificate.commonName.substr(0, 2) === '*.') {
+    certificate.name = '@.' + certificate.commonName.slice(2);
+  } else {
+    certificate.name = certificate.commonName;
+  }
+
   if (_.isArray(certMetadata.altNames)) {
     certificate.altNames = certMetadata.altNames;
   }
@@ -134,7 +143,7 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
     function(cb) {
       debug('create certificate', certificate.name);
       var params = {
-        Path: '/cloudfront/' + self._settings.serverCertificatePathPrefix + certificate.name + '/',
+        Path: '/cloudfront/' + self._settings.serverCertificatePathPrefix + certificate.commonName + '/',
         ServerCertificateName: certificate.name,
         CertificateBody: certificate.certificateBody,
         PrivateKey: certificate.privateKey,
@@ -180,7 +189,8 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
 
       if (err.code === 'EntityAlreadyExists' && err.message.indexOf('Server Certificate') >= 0) {
         return callback(Error.create('Certficate already exists', {
-          code: 'certificateExists'
+          code: 'certificateExists',
+          certDomain: certificate.commonName
         }));
       }
 
