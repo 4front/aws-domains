@@ -184,8 +184,9 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
     }
   ], function(err) {
     if (err) {
-      if (err.code === 'MalformedCertificate' && err.message.indexOf('Unable to validate certificate chain') >= 0) {
-        return callback(Error.create('Invalid certificate', {
+      // Just use the AWS error message text.
+      if (err.code === 'MalformedCertificate') {
+        return callback(Error.create(err.message, {
           code: 'malformedCertificate',
           badRequest: true
         }));
