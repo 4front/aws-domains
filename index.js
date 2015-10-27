@@ -122,7 +122,7 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
   try {
     certMetadata = x509.parseCert(certificate.certificateBody);
   } catch (err) {
-    return callback(Error.create('Could not parse certificate body', {
+    return callback(Error.create('Could not parse certificate body. Ensure the certificate is PEM encoded.', {
       code: 'malformedCertificate',
       badRequest: true
     }));
