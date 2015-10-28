@@ -21,9 +21,9 @@ function DomainManager(settings) {
   });
 }
 
-DomainManager.prototype.register = function(domainName, zoneId, callback) {
+DomainManager.prototype.register = function(domainName, zone, callback) {
   var self = this;
-  var distributionId = zoneId;
+  var distributionId = zone;
 
   debug('register domain %s', domainName);
 
@@ -175,7 +175,8 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
 
         _.extend(certificate, {
           zone: data.Distribution.Id,
-          status: data.Distribution.Status
+          status: data.Distribution.Status,
+          cname: data.Distribution.DomainName
         });
 
         debug('cloudfront distribution created', data.Distribution.Id);

@@ -191,7 +191,8 @@ describe('AwsDomainManager', function() {
     it('upload valid certificate', function(done) {
       this.createdDistribution = {
         Id: shortid.generate(),
-        Status: 'InProgress'
+        Status: 'InProgress',
+        DomainName: shortid.generate() + '.cloudfront.net'
       };
 
       this.domainManager.uploadCertificate(this.certificate, function(err, uploadedCert) {
@@ -213,7 +214,9 @@ describe('AwsDomainManager', function() {
         assert.equal(self.domainManagerSettings.cloudFrontOriginDomain, distributionConfig.Origins.Items[0].DomainName);
         assert.equal(self.commonName, uploadedCert.commonName);
         assert.equal(self.commonName, uploadedCert.name);
+
         assert.equal(uploadedCert.expires.getTime(), new Date(self.certificateMetadata.Expiration).getTime());
+        assert.equal(uploadedCert.cname, self.createdDistribution.DomainName);
 
         done();
       });
@@ -225,7 +228,8 @@ describe('AwsDomainManager', function() {
 
       this.createdDistribution = {
         Id: shortid.generate(),
-        Status: 'InProgress'
+        Status: 'InProgress',
+        DomainName: shortid.generate() + '.cloudfront.net'
       };
 
       this.domainManager.uploadCertificate(this.certificate, function(err, uploadedCert) {
@@ -236,10 +240,11 @@ describe('AwsDomainManager', function() {
         assert.equal(uploadCertArg.ServerCertificateName, '@.testdomain.com');
         assert.equal(uploadCertArg.Path, '/cloudfront/' + self.domainManagerSettings.serverCertificatePathPrefix + self.commonName + '/');
         assert.isTrue(self.cloudFrontStub.createDistribution.called);
-        assert.equal(self.commonName, uploadedCert.commonName);
+        assert.equal(uploadedCert.commonName, self.commonName);
 
         // The cert name should have replaced the '*' with an '@'
-        assert.equal('@.testdomain.com', uploadedCert.name);
+        assert.equal(uploadedCert.name, '@.testdomain.com');
+        assert.equal(uploadedCert.cname, self.createdDistribution.DomainName);
 
         done();
       });
