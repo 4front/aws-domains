@@ -331,4 +331,24 @@ describe('AwsDomainManager', function() {
       done();
     });
   });
+
+  it('get certificate status', function(done) {
+    var certificate = {
+      zone: shortid.generate()
+    };
+    var distroStatus = 'InProgress';
+
+    this.cloudFrontStub.getDistribution = sinon.spy(function(distributionId, callback) {
+      callback(null, {
+        Distribution: {Status: distroStatus}
+      });
+    });
+
+    this.domainManager.getCertificateStatus(certificate, function(err, status) {
+      if (err) return done(err);
+      assert.isTrue(self.cloudFrontStub.getDistribution.calledWith({Id: certificate.zone}));
+      assert.equal(status, distroStatus);
+      done();
+    });
+  });
 });
