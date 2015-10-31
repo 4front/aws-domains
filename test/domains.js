@@ -323,11 +323,20 @@ describe('AwsDomainManager', function() {
       callback();
     });
 
-    var certName = 'www.domain.com';
-    this.domainManager.deleteCertificate(certName, function(err) {
+    this.cloudFrontStub.deleteDistribution = sinon.spy(function(params, callback) {
+      callback();
+    });
+
+    var certificate = {
+      name: 'www.domain.com',
+      zone: shortid.generate()
+    };
+
+    this.domainManager.deleteCertificate(certificate, function(err) {
       if (err) return done(err);
 
-      assert.isTrue(self.iamStub.deleteServerCertificate.calledWith({ServerCertificateName: certName}));
+      assert.isTrue(self.cloudFrontStub.deleteDistribution.calledWith({Id: certificate.zone}));
+      assert.isTrue(self.iamStub.deleteServerCertificate.calledWith({ServerCertificateName: certificate.name}));
       done();
     });
   });

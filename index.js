@@ -207,8 +207,17 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
   });
 };
 
-DomainManager.prototype.deleteCertificate = function(certName, callback) {
-  this._iam.deleteServerCertificate({ServerCertificateName: certName}, callback);
+DomainManager.prototype.deleteCertificate = function(certificate, callback) {
+  // Delete the CloudFront distribution
+  var self = this;
+  async.series([
+    function(cb) {
+      self._cloudFront.deleteDistribution({Id: certificate.zone}, cb);
+    },
+    function(cb) {
+      self._iam.deleteServerCertificate({ServerCertificateName: certificate.name}, cb);
+    }
+  ], callback);
 };
 
 // Find one of the shared non-SSL CloudFront distributions that has available
