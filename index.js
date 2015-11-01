@@ -38,7 +38,17 @@ DomainManager.prototype.register = function(domainName, zone, callback) {
       }
     },
     function(distro, cb) {
+      if (!distro) {
+        return cb(Error.create('Cannot register domain with non-existent distribution'));
+      }
+
       var aliases = distro.Distribution.DistributionConfig.Aliases;
+      // Check if the domain name is already in the list of aliases.
+      if (_.contains(aliases.Items, domainName)) {
+        debug('alias %s already exists in distribution', domainName, distro.Distribution.Id);
+        return cb(null, distro);
+      }
+
       aliases.Items.push(domainName);
       aliases.Quantity += 1;
 
@@ -71,7 +81,7 @@ DomainManager.prototype.unregister = function(domainName, distributionId, callba
     if (err) return callback(err);
 
     if (!distro) {
-      debug('did not find domain %s to unregister', domainName);
+      debug('could not find any of distributions %s to unregister domain from', distributionsToSearch);
       return callback();
     }
 
@@ -101,6 +111,7 @@ DomainManager.prototype.getCertificateStatus = function(certificate, callback) {
 DomainManager.prototype.transferDomain = function(domainName, currentZone, targetZone, callback) {
   var currentDistributionId = currentZone;
   var targetDistributionId = targetZone;
+  debug('transfer domain %s from distribution %s to distribution %s', domainName, currentZone, targetZone);
 
   var self = this;
 
@@ -108,7 +119,7 @@ DomainManager.prototype.transferDomain = function(domainName, currentZone, targe
     function(cb) {
       self.unregister(domainName, currentDistributionId, cb);
     },
-    function(distro, cb) {
+    function(domain, cb) {
       self.register(domainName, targetDistributionId, cb);
     }
   ], callback);
@@ -238,13 +249,16 @@ DomainManager.prototype._findNonSslDistribution = function(callback) {
 DomainManager.prototype._getDistribution = function(distributionId, callback) {
   debug('get cloudfront distribution', distributionId);
   this._cloudFront.getDistribution({Id: distributionId}, function(err, distro) {
-    if (err) return callback(err);
-
-    if (!distro) {
-      return callback(Error.create('No distribution with id ' + distributionId, {
-        code: 'invalidDistribution'
-      }));
+    if (err) {
+      if (err.code === 'NoSuchDistribution') return callback();
+      return callback(err);
     }
+
+    // if (!distro) {
+    //   return callback(Error.create('No distribution with id ' + distributionId, {
+    //     code: 'invalidDistribution'
+    //   }));
+    // }
 
     callback(null, distro);
   });
@@ -263,7 +277,7 @@ DomainManager.prototype._findDistribution = function(distributionIds, test, call
     self._getDistribution(distributionIds[i], function(err, distro) {
       if (err) return cb(err);
 
-      if (test(distro.Distribution)) {
+      if (distro && test(distro.Distribution)) {
         found = distro;
       }
 
@@ -286,6 +300,7 @@ DomainManager.prototype._updateDistribution = function(distribution, callback) {
     DistributionConfig: distribution.Distribution.DistributionConfig,
     IfMatch: distribution.ETag
   }, function(err, data) {
+    // debugger;
     if (err) {
       if (err.code === 'InvalidArgument' && /duplicates/.test(err.message)) {
         return callback(Error.create('CNAME already exists', {code: 'CNAMEAlreadyExists'}));
