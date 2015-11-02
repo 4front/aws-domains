@@ -111,6 +111,8 @@ DomainManager.prototype.getCertificateStatus = function(certificate, callback) {
 DomainManager.prototype.transferDomain = function(domainName, currentZone, targetZone, callback) {
   var currentDistributionId = currentZone;
   var targetDistributionId = targetZone;
+
+  if (currentDistributionId === targetDistributionId) return callback();
   debug('transfer domain %s from distribution %s to distribution %s', domainName, currentZone, targetZone);
 
   var self = this;
