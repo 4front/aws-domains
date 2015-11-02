@@ -60,7 +60,7 @@ DomainManager.prototype.register = function(domainName, zone, callback) {
 DomainManager.prototype.unregister = function(domainName, distributionId, callback) {
   var self = this;
 
-  debug('unregister the CNAME %s', domainName);
+  debug('unregister the CNAME %s from distribution %s', domainName, distributionId);
   // Load the distribution
 
   // If a distributionId was specified, just search that one. Otherwise
