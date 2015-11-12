@@ -221,6 +221,7 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
 };
 
 DomainManager.prototype.deleteCertificate = function(certificate, callback) {
+  debug('delete certificate', certificate.name);
   // Delete the CloudFront distribution
   var self = this;
   async.series([
@@ -255,12 +256,6 @@ DomainManager.prototype._getDistribution = function(distributionId, callback) {
       if (err.code === 'NoSuchDistribution') return callback();
       return callback(err);
     }
-
-    // if (!distro) {
-    //   return callback(Error.create('No distribution with id ' + distributionId, {
-    //     code: 'invalidDistribution'
-    //   }));
-    // }
 
     callback(null, distro);
   });
