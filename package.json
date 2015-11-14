@@ -21,7 +21,7 @@
     "lodash": "^3.10.1",
     "shortid": "^2.2.4",
     "simple-errors": "^1.0.1",
-    "x509": "^0.2.3"
+    "x509.js": "^1.0.0"
   },
   "devDependencies": {
     "dash-assert": "^1.0.3",

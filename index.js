@@ -1,7 +1,7 @@
 var AWS = require('aws-sdk');
 var async = require('async');
 var _ = require('lodash');
-var x509 = require('x509');
+var x509 = require('x509.js');
 var distributionConfig = require('./lib/distribution-config');
 var debug = require('debug')('4front:aws-domains');
 
