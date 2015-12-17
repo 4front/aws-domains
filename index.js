@@ -45,8 +45,7 @@ DomainManager.prototype.register = function(domainName, zone, callback) {
       var aliases = distro.Distribution.DistributionConfig.Aliases;
       // Check if the domain name is already in the list of aliases.
       if (_.contains(aliases.Items, domainName)) {
-        debug('alias %s already exists in distribution', domainName, distro.Distribution.Id);
-        return cb(null, distro);
+        return callback(Error.create('CNAME already exists', {code: 'CNAMEAlreadyExists'}));
       }
 
       aliases.Items.push(domainName);
@@ -297,7 +296,6 @@ DomainManager.prototype._updateDistribution = function(distribution, callback) {
     DistributionConfig: distribution.Distribution.DistributionConfig,
     IfMatch: distribution.ETag
   }, function(err, data) {
-    // debugger;
     if (err) {
       if (err.code === 'InvalidArgument' && /duplicates/.test(err.message)) {
         return callback(Error.create('CNAME already exists', {code: 'CNAMEAlreadyExists'}));
