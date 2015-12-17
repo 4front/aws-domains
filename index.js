@@ -17,7 +17,7 @@ function DomainManager(settings) {
   // The default limit on CNAMEs for a CloudFront distribution is 200
   // However it should be possible to request more.
   this._settings = _.defaults({}, settings, {
-    maxAliasesPerDistribution: 200
+    maxAliasesPerDistribution: 100
   });
 }
 
