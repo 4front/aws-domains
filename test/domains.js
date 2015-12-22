@@ -79,7 +79,7 @@ describe('AwsDomainManager', function() {
       cloudFrontOriginDomain: 'origin.com',
       cloudFrontLogBucket: 'log-bucket',
       cloudFrontCustomErrorsDomain: 'bucket-name.s3.amazonaws.com', //eslint-disable-line
-      cloudFrontCustomErrorsPath: '/__custom-errors', //eslint-disable-line
+      cloudFrontCustomErrorsPath: '/__cloudfront-errors', //eslint-disable-line
       cloudFrontNoCachePathPattern: '/__nocdn', //eslint-disable-line
       serverCertificatePathPrefix: 'cert-prefix/', //eslint-disable-line
       cookiePrefix: '4front_'
@@ -227,15 +227,14 @@ describe('AwsDomainManager', function() {
         assert.equal(distributionConfig.CacheBehaviors.Items[0].PathPattern, self.domainManagerSettings.cloudFrontNoCachePathPattern);
 
         var customErrorsBehavior = distributionConfig.CacheBehaviors.Items[1];
-        assert.equal(customErrorsBehavior.PathPattern, '/__custom-errors/*');
+        assert.equal(customErrorsBehavior.PathPattern, '/__cloudfront-errors/*');
         assert.equal(customErrorsBehavior.TargetOriginId, self.certificate.commonName + '-custom-errors');
 
         var customErrorResponses = distributionConfig.CustomErrorResponses;
-        assert.equal(5, customErrorResponses.Quantity);
-        assert.equal(5, customErrorResponses.Items.length);
+        assert.equal(4, customErrorResponses.Quantity);
+        assert.equal(4, customErrorResponses.Items.length);
 
-        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 501}));
-        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 502}));
+        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 502, ResponsePagePath: '/__cloudfront-errors/502.html'}));
         assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 503}));
         assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 504}));
         assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 403}));
