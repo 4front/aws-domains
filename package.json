@@ -21,6 +21,7 @@
     "lodash": "^3.10.1",
     "shortid": "^2.2.4",
     "simple-errors": "^1.0.1",
+    "url-join": "0.0.1",
     "x509.js": "^1.0.0"
   },
   "devDependencies": {

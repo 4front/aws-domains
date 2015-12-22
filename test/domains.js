@@ -78,7 +78,10 @@ describe('AwsDomainManager', function() {
       maxAliasesPerDistribution: 3,
       cloudFrontOriginDomain: 'origin.com',
       cloudFrontLogBucket: 'log-bucket',
-      serverCertificatePathPrefix: 'cert-prefix/',
+      cloudFrontCustomErrorsDomain: 'bucket-name.s3.amazonaws.com', //eslint-disable-line
+      cloudFrontCustomErrorsPath: '/__custom-errors', //eslint-disable-line
+      cloudFrontNoCachePathPattern: '/__nocdn', //eslint-disable-line
+      serverCertificatePathPrefix: 'cert-prefix/', //eslint-disable-line
       cookiePrefix: '4front_'
     };
 
@@ -209,9 +212,34 @@ describe('AwsDomainManager', function() {
         assert.isTrue(self.cloudFrontStub.createDistribution.called);
         var distributionConfig = self.cloudFrontStub.createDistribution.getCall(0).args[0].DistributionConfig;
 
-        assert.equal(1, distributionConfig.Origins.Quantity);
-        assert.equal(1, distributionConfig.Origins.Items.length);
+        assert.equal(distributionConfig.DefaultCacheBehavior.TargetOriginId, self.certificate.name);
+
+        assert.equal(2, distributionConfig.Origins.Quantity);
+        assert.equal(2, distributionConfig.Origins.Items.length);
+
         assert.equal(self.domainManagerSettings.cloudFrontOriginDomain, distributionConfig.Origins.Items[0].DomainName);
+        assert.equal(distributionConfig.Origins.Items[1].DomainName, self.domainManagerSettings.cloudFrontCustomErrorsDomain);
+
+        // Assertions about the cache behaviors
+        assert.equal(2, distributionConfig.CacheBehaviors.Quantity);
+        assert.equal(2, distributionConfig.CacheBehaviors.Items.length);
+
+        assert.equal(distributionConfig.CacheBehaviors.Items[0].PathPattern, self.domainManagerSettings.cloudFrontNoCachePathPattern);
+
+        var customErrorsBehavior = distributionConfig.CacheBehaviors.Items[1];
+        assert.equal(customErrorsBehavior.PathPattern, '/__custom-errors/*');
+        assert.equal(customErrorsBehavior.TargetOriginId, self.certificate.commonName + '-custom-errors');
+
+        var customErrorResponses = distributionConfig.CustomErrorResponses;
+        assert.equal(5, customErrorResponses.Quantity);
+        assert.equal(5, customErrorResponses.Items.length);
+
+        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 501}));
+        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 502}));
+        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 503}));
+        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 504}));
+        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 403}));
+
         assert.equal(self.commonName, uploadedCert.commonName);
         assert.equal(self.commonName, uploadedCert.name);
 
