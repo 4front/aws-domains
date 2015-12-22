@@ -237,7 +237,7 @@ describe('AwsDomainManager', function() {
         assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 502, ResponsePagePath: '/__cloudfront-errors/502.html'}));
         assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 503}));
         assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 504}));
-        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 403}));
+        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 403, ResponseCode: '503'}));
 
         assert.equal(self.commonName, uploadedCert.commonName);
         assert.equal(self.commonName, uploadedCert.name);
