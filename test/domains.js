@@ -231,13 +231,12 @@ describe('AwsDomainManager', function() {
         assert.equal(customErrorsBehavior.TargetOriginId, self.certificate.commonName + '-custom-errors');
 
         var customErrorResponses = distributionConfig.CustomErrorResponses;
-        assert.equal(4, customErrorResponses.Quantity);
-        assert.equal(4, customErrorResponses.Items.length);
+        assert.equal(3, customErrorResponses.Quantity);
+        assert.equal(3, customErrorResponses.Items.length);
 
         assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 502, ResponsePagePath: '/__cloudfront-errors/502.html'}));
         assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 503}));
         assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 504}));
-        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 403, ResponseCode: '503'}));
 
         assert.equal(self.commonName, uploadedCert.commonName);
         assert.equal(self.commonName, uploadedCert.name);
