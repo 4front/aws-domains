@@ -1,0 +1,176 @@
+{
+    "Distribution": {
+        "Status": "Deployed",
+        "DomainName": "d2m0kz966n92fa.cloudfront.net",
+        "InProgressInvalidationBatches": 0,
+        "DistributionConfig": {
+            "Comment": "Aerobatic custom domains 2",
+            "CacheBehaviors": {
+                "Items": [
+                    {
+                        "TrustedSigners": {
+                            "Enabled": false,
+                            "Quantity": 0
+                        },
+                        "TargetOriginId": "S3-4front-media",
+                        "ViewerProtocolPolicy": "allow-all",
+                        "ForwardedValues": {
+                            "Headers": {
+                                "Quantity": 0
+                            },
+                            "Cookies": {
+                                "Forward": "none"
+                            },
+                            "QueryString": false
+                        },
+                        "PathPattern": "/__cloudfront-errors/*",
+                        "SmoothStreaming": false,
+                        "AllowedMethods": {
+                            "Items": [
+                                "HEAD",
+                                "DELETE",
+                                "POST",
+                                "GET",
+                                "OPTIONS",
+                                "PUT",
+                                "PATCH"
+                            ],
+                            "CachedMethods": {
+                                "Items": [
+                                    "HEAD",
+                                    "GET"
+                                ],
+                                "Quantity": 2
+                            },
+                            "Quantity": 7
+                        },
+                        "MinTTL": 0
+                    }
+                ],
+                "Quantity": 1
+            },
+            "Logging": {
+                "Bucket": "aerobatic-cloudfront-logs.s3.amazonaws.com",
+                "Prefix": "custom_domains/",
+                "Enabled": true,
+                "IncludeCookies": false
+            },
+            "Origins": {
+                "Items": [
+                    {
+                        "OriginPath": "",
+                        "S3OriginConfig": {
+                            "OriginAccessIdentity": ""
+                        },
+                        "Id": "S3-4front-media",
+                        "DomainName": "4front-media.s3.amazonaws.com"
+                    },
+                    {
+                        "OriginPath": "",
+                        "CustomOriginConfig": {
+                            "OriginProtocolPolicy": "http-only",
+                            "HTTPPort": 80,
+                            "HTTPSPort": 443
+                        },
+                        "Id": "Custom Aerobatic App domains 2",
+                        "DomainName": "aerobatic-prod.elasticbeanstalk.com"
+                    }
+                ],
+                "Quantity": 2
+            },
+            "DefaultRootObject": "",
+            "PriceClass": "PriceClass_All",
+            "Enabled": true,
+            "DefaultCacheBehavior": {
+                "TrustedSigners": {
+                    "Enabled": false,
+                    "Quantity": 0
+                },
+                "TargetOriginId": "Custom Aerobatic App domains 2",
+                "ViewerProtocolPolicy": "allow-all",
+                "ForwardedValues": {
+                    "Headers": {
+                        "Items": [
+                            "Accept",
+                            "Authorization",
+                            "CloudFront-Forwarded-Proto",
+                            "Host"
+                        ],
+                        "Quantity": 4
+                    },
+                    "Cookies": {
+                        "Forward": "none"
+                    },
+                    "QueryString": true
+                },
+                "SmoothStreaming": false,
+                "AllowedMethods": {
+                    "Items": [
+                        "HEAD",
+                        "DELETE",
+                        "POST",
+                        "GET",
+                        "OPTIONS",
+                        "PUT",
+                        "PATCH"
+                    ],
+                    "CachedMethods": {
+                        "Items": [
+                            "HEAD",
+                            "GET",
+                            "OPTIONS"
+                        ],
+                        "Quantity": 3
+                    },
+                    "Quantity": 7
+                },
+                "MinTTL": 0
+            },
+            "CallerReference": "1433024464355",
+            "ViewerCertificate": {
+                "CloudFrontDefaultCertificate": true,
+                "MinimumProtocolVersion": "SSLv3"
+            },
+            "CustomErrorResponses": {
+                "Items": [
+                    {
+                        "ErrorCode": 502,
+                        "ResponsePagePath": "/__cloudfront-errors/502.html",
+                        "ResponseCode": "502",
+                        "ErrorCachingMinTTL": 0
+                    },
+                    {
+                        "ErrorCode": 503,
+                        "ResponsePagePath": "/__cloudfront-errors/503.html",
+                        "ResponseCode": "503",
+                        "ErrorCachingMinTTL": 0
+                    },
+                    {
+                        "ErrorCode": 504,
+                        "ResponsePagePath": "/__cloudfront-errors/504.html",
+                        "ResponseCode": "504",
+                        "ErrorCachingMinTTL": 0
+                    }
+                ],
+                "Quantity": 3
+            },
+            "Restrictions": {
+                "GeoRestriction": {
+                    "RestrictionType": "none",
+                    "Quantity": 0
+                }
+            },
+            "Aliases": {
+                "Items": [],
+                "Quantity": 0
+            }
+        },
+        "ActiveTrustedSigners": {
+            "Enabled": false,
+            "Quantity": 0
+        },
+        "LastModifiedTime": "2016-01-15T08:29:30.797Z",
+        "Id": "E2ZNN3BBD2ETVG"
+    },
+    "ETag": "E3MGG600GE9VTB"
+}

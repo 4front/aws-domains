@@ -182,7 +182,8 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
     function(cb) {
       // Create a new CloudFront distribution
       debug('creating cloudfront distribution');
-      self._cloudFront.createDistribution(distributionConfig(self._settings, certificate), function(err, data) {
+      var config = distributionConfig(self._settings, certificate.commonName, certificate);
+      self._cloudFront.createDistribution(config, function(err, data) {
         if (err) return cb(err);
 
         _.extend(certificate, {
@@ -305,5 +306,17 @@ DomainManager.prototype._updateDistribution = function(distribution, callback) {
 
     // Return the distributionId in the callback
     callback(null, data.Distribution.Id);
+  });
+};
+
+DomainManager.prototype.createSharedDistribution = function(distributionName, callback) {
+  // Create a new CloudFront distribution
+  debug('creating cloudfront distribution');
+  var config = distributionConfig(self._settings, distributionName);
+  self._cloudFront.createDistribution(config, function(err, data) {
+    if (err) return callback(err);
+
+    debug('cloudfront distribution created', data.Distribution.Id);
+    callback(null, data.Distribution);
   });
 };
