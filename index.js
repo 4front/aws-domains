@@ -312,8 +312,8 @@ DomainManager.prototype._updateDistribution = function(distribution, callback) {
 DomainManager.prototype.createSharedDistribution = function(distributionName, callback) {
   // Create a new CloudFront distribution
   debug('creating cloudfront distribution');
-  var config = distributionConfig(self._settings, distributionName);
-  self._cloudFront.createDistribution(config, function(err, data) {
+  var config = distributionConfig(this._settings, distributionName);
+  this._cloudFront.createDistribution(config, function(err, data) {
     if (err) return callback(err);
 
     debug('cloudfront distribution created', data.Distribution.Id);
