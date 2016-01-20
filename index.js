@@ -159,7 +159,7 @@ DomainManager.prototype.uploadCertificate = function(certificate, options, callb
   // Tack a timestamp onto the certname. We need to have two certs with the
   // same common name during the renewal interval when Cloudfront is migrating
   // from the old version to the new version to avoid any SSL service interruption.
-  certificate.name += ('-' + dateFormat('yyyy-MM-dd:hh:mm', new Date()));
+  certificate.name += ('-' + dateFormat('yyyy-MM-dd-hh-mm', new Date()));
 
   if (_.isArray(certMetadata.altNames)) {
     certificate.altNames = certMetadata.altNames;
