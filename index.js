@@ -2,6 +2,7 @@ var AWS = require('aws-sdk');
 var async = require('async');
 var _ = require('lodash');
 var x509 = require('x509.js');
+var dateFormat = require('date-format');
 var distributionConfig = require('./lib/distribution-config');
 var debug = require('debug')('4front:aws-domains');
 
@@ -45,7 +46,7 @@ DomainManager.prototype.register = function(domainName, zone, callback) {
       var aliases = distro.Distribution.DistributionConfig.Aliases;
       // Check if the domain name is already in the list of aliases.
       if (_.contains(aliases.Items, domainName)) {
-        return callback(Error.create('CNAME already exists', {code: 'CNAMEAlreadyExists'}));
+        return callback(Error.create('CNAME already exists', {code: 'CNAMEAlreadyExists', log: false}));
       }
 
       aliases.Items.push(domainName);
@@ -126,8 +127,12 @@ DomainManager.prototype.transferDomain = function(domainName, currentZone, targe
   ], callback);
 };
 
-DomainManager.prototype.uploadCertificate = function(certificate, callback) {
+DomainManager.prototype.uploadCertificate = function(certificate, options, callback) {
   var self = this;
+  if (_.isFunction(options)) {
+    callback = options;
+    options = {};
+  }
 
   // Parse the public key
   var certMetadata;
@@ -136,7 +141,8 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
   } catch (err) {
     return callback(Error.create('Could not parse certificate body. Ensure the certificate is PEM encoded.', {
       code: 'malformedCertificate',
-      badRequest: true
+      badRequest: true,
+      log: false
     }));
   }
 
@@ -149,6 +155,11 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
   } else {
     certificate.name = certificate.commonName;
   }
+
+  // Tack a timestamp onto the certname. We need to have two certs with the
+  // same common name during the renewal interval when Cloudfront is migrating
+  // from the old version to the new version to avoid any SSL service interruption.
+  certificate.name += ('-' + dateFormat('yyyy-MM-dd:hh:mm', new Date()));
 
   if (_.isArray(certMetadata.altNames)) {
     certificate.altNames = certMetadata.altNames;
@@ -180,6 +191,8 @@ DomainManager.prototype.uploadCertificate = function(certificate, callback) {
       });
     },
     function(cb) {
+      if (options.skipCloudFrontDistribution === true) return cb();
+
       // Create a new CloudFront distribution
       debug('creating cloudfront distribution');
       var config = distributionConfig(self._settings, certificate.commonName, certificate);

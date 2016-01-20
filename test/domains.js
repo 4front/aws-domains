@@ -203,7 +203,9 @@ describe('AwsDomainManager', function() {
 
         assert.isTrue(self.iamStub.uploadServerCertificate.calledWith({
           CertificateBody: self.certificate.certificateBody,
-          ServerCertificateName: self.commonName,
+          ServerCertificateName: sinon.match(function(value) {
+            return value.substr(0, self.commonName.length) === self.commonName;
+          }),
           Path: '/cloudfront/' + self.domainManagerSettings.serverCertificatePathPrefix + self.commonName + '/',
           PrivateKey: self.certificate.privateKey,
           CertificateChain: self.certificate.certificateChain
@@ -212,7 +214,7 @@ describe('AwsDomainManager', function() {
         assert.isTrue(self.cloudFrontStub.createDistribution.called);
         var distributionConfig = self.cloudFrontStub.createDistribution.getCall(0).args[0].DistributionConfig;
 
-        assert.equal(distributionConfig.DefaultCacheBehavior.TargetOriginId, self.certificate.name);
+        assert.equal(distributionConfig.DefaultCacheBehavior.TargetOriginId, self.certificate.commonName);
 
         assert.equal(2, distributionConfig.Origins.Quantity);
         assert.equal(2, distributionConfig.Origins.Items.length);
@@ -239,7 +241,6 @@ describe('AwsDomainManager', function() {
         assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 504}));
 
         assert.equal(self.commonName, uploadedCert.commonName);
-        assert.equal(self.commonName, uploadedCert.name);
 
         assert.equal(uploadedCert.expires.getTime(), new Date(self.certificateMetadata.Expiration).getTime());
         assert.equal(uploadedCert.cname, self.createdDistribution.DomainName);
@@ -263,13 +264,13 @@ describe('AwsDomainManager', function() {
 
         var uploadCertArg = self.iamStub.uploadServerCertificate.getCall(0).args[0];
         assert.equal(uploadCertArg.CertificateBody, self.certificate.certificateBody);
-        assert.equal(uploadCertArg.ServerCertificateName, '@.testdomain.com');
+        assert.equal(uploadCertArg.ServerCertificateName.substr(0, 16), '@.testdomain.com');
         assert.equal(uploadCertArg.Path, '/cloudfront/' + self.domainManagerSettings.serverCertificatePathPrefix + self.commonName + '/');
         assert.isTrue(self.cloudFrontStub.createDistribution.called);
         assert.equal(uploadedCert.commonName, self.commonName);
 
         // The cert name should have replaced the '*' with an '@'
-        assert.equal(uploadedCert.name, '@.testdomain.com');
+        assert.equal(uploadedCert.name.substr(0, 16), '@.testdomain.com');
         assert.equal(uploadedCert.cname, self.createdDistribution.DomainName);
 
         done();
