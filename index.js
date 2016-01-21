@@ -182,6 +182,7 @@ DomainManager.prototype.uploadCertificate = function(certificate, options, callb
         debug('created certificate', JSON.stringify(data));
 
         _.extend(certificate, {
+          cname: certificate.commonName,
           certificateId: data.ServerCertificateMetadata.ServerCertificateId,
           expires: new Date(data.ServerCertificateMetadata.Expiration),
           uploadDate: new Date(data.ServerCertificateMetadata.UploadDate)
