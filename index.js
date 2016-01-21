@@ -217,6 +217,7 @@ DomainManager.prototype.uploadCertificate = function(certificate, options, callb
       if (err.code === 'MalformedCertificate') {
         return callback(Error.create(err.message, {
           code: 'malformedCertificate',
+          certName: certificate.name,
           badRequest: true
         }));
       }
@@ -224,6 +225,7 @@ DomainManager.prototype.uploadCertificate = function(certificate, options, callb
       if (err.code === 'EntityAlreadyExists' && err.message.indexOf('Server Certificate') >= 0) {
         return callback(Error.create('Certficate already exists', {
           code: 'certificateExists',
+          certName: certificate.name,
           certDomain: certificate.commonName,
           badRequest: true
         }));
