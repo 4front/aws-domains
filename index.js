@@ -2,6 +2,7 @@ var AWS = require('aws-sdk');
 var async = require('async');
 var _ = require('lodash');
 var x509 = require('x509.js');
+var sha1 = require('sha1');
 var dateFormat = require('date-format');
 var distributionConfig = require('./lib/distribution-config');
 var debug = require('debug')('4front:aws-domains');
@@ -13,6 +14,8 @@ module.exports = DomainManager;
 function DomainManager(settings) {
   this._cloudFront = new AWS.CloudFront();
   this._iam = new AWS.IAM();
+  this._certManager = new AWS.ACM(settings.certificateManagerRegion ?
+    {region: settings.certificateManagerRegion} : null);
   this._settings = settings;
 
   // The default limit on CNAMEs for a CloudFront distribution is 200
@@ -125,6 +128,27 @@ DomainManager.prototype.transferDomain = function(domainName, currentZone, targe
       self.register(domainName, targetDistributionId, cb);
     }
   ], callback);
+};
+
+DomainManager.prototype.requestWildcardCertificate = function(domainName, callback) {
+  var params = {
+    DomainName: '*.' + domainName,
+    DomainValidationOptions: [
+      {
+        DomainName: '*.' + domainName,
+        ValidationDomain: domainName
+      }
+    ],
+    // just use a hash of the domainName as the idempotency token
+    IdempotencyToken: sha1(domainName).substr(0, 31),
+    // request that the apex domain be listed as a SAN
+    SubjectAlternativeNames: [domainName]
+  };
+
+  this._certManager.requestCertificate(params, function(err, data) {
+    if (err) return callback(err);
+    callback(null, data.CertificateArn);
+  });
 };
 
 DomainManager.prototype.uploadCertificate = function(certificate, options, callback) {

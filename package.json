@@ -16,10 +16,11 @@
   "license": "Apache-2.0",
   "dependencies": {
     "async": "^1.5.1",
-    "aws-sdk": "^2.2.26",
+    "aws-sdk": "^2.2.32",
     "date-format": "0.0.2",
     "debug": "^2.2.0",
     "lodash": "^3.10.1",
+    "sha1": "^1.1.1",
     "shortid": "^2.2.4",
     "simple-errors": "^1.0.1",
     "url-join": "0.0.1",
