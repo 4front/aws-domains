@@ -273,7 +273,10 @@ DomainManager.prototype.deleteCertificate = function(certificate, callback) {
     function(cb) {
       // cb();
       // TODO: Instead make a call to self._certManager.deleteCertificate();
-      self._iam.deleteServerCertificate({ServerCertificateName: certificate.name}, cb);
+      self._iam.deleteServerCertificate({ServerCertificateName: certificate.name}, function(err) {
+        if (err && err.code !== 'NoSuchEntity') return cb(err);
+        cb();
+      });
     }
   ], callback);
 };
