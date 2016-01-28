@@ -267,9 +267,12 @@ DomainManager.prototype.deleteCertificate = function(certificate, callback) {
   var self = this;
   async.series([
     function(cb) {
+      if (_.isEmpty(certificate.zone)) return cb();
       self._cloudFront.deleteDistribution({Id: certificate.zone}, cb);
     },
     function(cb) {
+      // cb();
+      // TODO: Instead make a call to self._certManager.deleteCertificate();
       self._iam.deleteServerCertificate({ServerCertificateName: certificate.name}, cb);
     }
   ], callback);
