@@ -1,7 +1,6 @@
 /* eslint no-console: 0 */
 
 var DomainManager = require('./');
-var fs = require('fs');
 
 var domains = new DomainManager({
   cloudFrontOriginDomain: 'aerobatic-prod.elasticbeanstalk.com',

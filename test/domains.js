@@ -2,8 +2,7 @@ var assert = require('assert');
 var _ = require('lodash');
 var shortid = require('shortid');
 var sinon = require('sinon');
-var fs = require('fs');
-var path = require('path');
+var sha1 = require('sha1');
 var AWS = require('aws-sdk');
 
 require('dash-assert');
@@ -41,8 +40,8 @@ describe('AwsDomainManager', function() {
 
         callback(null, distribution);
       }),
-      createDistribution: sinon.spy(function(params, callback) {
-        callback(null, {Distribution: self.createdDistribution});
+      deleteDistribution: sinon.spy(function(params, callback) {
+        callback();
       }),
       updateDistribution: sinon.spy(function(params, callback) {
         callback(null, {
@@ -51,15 +50,12 @@ describe('AwsDomainManager', function() {
       })
     };
 
-    this.certificateMetadata = {
-      ServerCertificateId: shortid.generate(),
-      Expiration: new Date(Date.now() + 100000000).toISOString(),
-      UploadDate: new Date().toISOString()
-    };
-
-    this.iamStub = {
-      uploadServerCertificate: sinon.spy(function(params, callback) {
-        callback(null, {ServerCertificateMetadata: self.certificateMetadata});
+    this.acmStub = {
+      deleteCertificate: sinon.spy(function(params, callback) {
+        callback();
+      }),
+      resendValidationEmail: sinon.spy(function(params, callback) {
+        callback();
       })
     };
 
@@ -69,6 +65,10 @@ describe('AwsDomainManager', function() {
 
     sinon.stub(AWS, 'CloudFront', function() {
       return self.cloudFrontStub;
+    });
+
+    sinon.stub(AWS, 'ACM', function() {
+      return self.acmStub;
     });
 
     this.domainManagerSettings = {
@@ -91,66 +91,33 @@ describe('AwsDomainManager', function() {
   afterEach(function() {
     sinon.restore(AWS, 'CloudFront');
     sinon.restore(AWS, 'IAM');
+    sinon.restore(AWS, 'ACM');
   });
 
-  it('creates CNAME alias in first available distribution', function(done) {
-    this.domainManager.register('test.mydomain.com', null, function(err, distributionId) {
+  it('requestWildcardCertificate', function(done) {
+    var domainName = shortid.generate() + '.com';
+    var certificateId = shortid.generate();
+
+    this.acmStub.requestCertificate = sinon.spy(function(params, callback) {
+      callback(null, {CertificateArn: certificateId});
+    });
+
+    this.domainManager.requestWildcardCertificate(domainName, function(err, data) {
       if (err) return done(err);
 
-      assert.equal(1, self.cloudFrontStub.getDistribution.callCount);
-      assert.ok(self.cloudFrontStub.getDistribution.calledWith(sinon.match({
-        Id: self.distributions[0].Distribution.Id
-      })));
+      assert.equal(data, certificateId);
 
-      assert.ok(self.cloudFrontStub.updateDistribution.called);
-
-      var updatedDistribution = self.cloudFrontStub.updateDistribution.getCall(0).args[0];
-      assert.deepEqual(updatedDistribution.DistributionConfig.Aliases, {
-        Items: ['test.mydomain.com'],
-        Quantity: 1
-      });
-
-      assert.equal(updatedDistribution.Id, self.distributions[0].Distribution.Id);
-
-      assert.equal(distributionId, self.distributions[0].Distribution.Id);
-      done();
-    });
-  });
-
-  it('creates CNAME alias in 2nd distribution if first is full', function(done) {
-    var firstDistro = this.distributions[0].Distribution.DistributionConfig;
-    _.times(3, function(i) {
-      firstDistro.Aliases.Items.push(i + '.domain.com');
-    });
-
-    firstDistro.Aliases.Quantity = 3;
-
-    this.domainManager.register('test.mydomain.com', null, function(err, distributionId) {
-      if (err) return done(err);
-
-      var distroIds = _.map(self.distributions, function(distro) {
-        return distro.Distribution.Id;
-      });
-
-      assert.equal(2, self.cloudFrontStub.getDistribution.callCount);
-      assert.ok(self.cloudFrontStub.getDistribution.calledWith({Id: distroIds[0]}));
-      assert.ok(self.cloudFrontStub.getDistribution.calledWith({Id: distroIds[1]}));
-      assert.equal(self.cloudFrontStub.updateDistribution.getCall(0).args[0].Id, distroIds[1]);
-      assert.equal(distributionId, distroIds[1]);
-
-      done();
-    });
-  });
-
-  it('throws error if domain already registered', function(done) {
-    this.cloudFrontStub.updateDistribution = function(params, callback) {
-      callback(Error.create('No duplicates allowed', {
-        code: 'InvalidArgument'
+      assert.isTrue(self.acmStub.requestCertificate.calledWith({
+        DomainName: '*.' + domainName,
+        DomainValidationOptions: [
+          {
+            DomainName: '*.' + domainName,
+            ValidationDomain: domainName
+          }
+        ],
+        IdempotencyToken: sha1(domainName).substr(0, 31),
+        SubjectAlternativeNames: [domainName]
       }));
-    };
-
-    this.domainManager.register('two.domain.com', null, function(err) {
-      assert.equal(err.code, 'CNAMEAlreadyExists');
       done();
     });
   });
@@ -176,213 +143,113 @@ describe('AwsDomainManager', function() {
     });
   });
 
-  describe('uploadCertificate', function() {
-    beforeEach(function() {
-      self = this;
+  it('createCdnDistribution', function(done) {
+    var topLevelDomain = 'jsngin.com';
+    var distributionId = shortid.generate();
+    var certificateId = shortid.generate();
+    var distributionDomainName = shortid.generate() + '.cloudfront.net';
 
-      this.commonName = 'www.jsngin.com';
-      var certificateBody = fs.readFileSync(path.join(__dirname, './fixtures/cert.key')).toString();
-      // Only the certificateBody has to be valid for the unit test.
-      this.certificate = {
-        orgId: this.orgId,
-        certificateBody: certificateBody,
-        privateKey: '-----BEGIN RSA PRIVATE KEY-----\nMIIEpQIBAAKCAQEAyFI8vGS8rGbI\n-----END RSA PRIVATE KEY-----',
-        certificateChain: '-----BEGIN CERTIFICATE-----\nMIIF2TCCA8GgAwIBAgIHFxU9nqs\n-----END CERTIFICATE-----'
-      };
+    this.cloudFrontStub.createDistribution = sinon.spy(function(params, callback) {
+      callback(null, {Distribution: {
+        Id: distributionId,
+        DomainName: distributionDomainName,
+        Status: 'InProgress'
+      }});
     });
 
-    it('upload valid certificate', function(done) {
-      this.createdDistribution = {
-        Id: shortid.generate(),
-        Status: 'InProgress',
-        DomainName: shortid.generate() + '.cloudfront.net'
-      };
+    this.domainManager.createCdnDistribution(topLevelDomain, certificateId, function(err, distribution) {
+      if (err) return done(err);
 
-      this.domainManager.uploadCertificate(this.certificate, function(err, uploadedCert) {
-        if (err) return done(err);
+      assert.isTrue(self.cloudFrontStub.createDistribution.called);
+      var distributionConfig = self.cloudFrontStub.createDistribution.getCall(0).args[0].DistributionConfig;
 
-        assert.isTrue(self.iamStub.uploadServerCertificate.calledWith({
-          CertificateBody: self.certificate.certificateBody,
-          ServerCertificateName: sinon.match(function(value) {
-            return value.substr(0, self.commonName.length) === self.commonName;
-          }),
-          Path: '/cloudfront/' + self.domainManagerSettings.serverCertificatePathPrefix + self.commonName + '/',
-          PrivateKey: self.certificate.privateKey,
-          CertificateChain: self.certificate.certificateChain
-        }));
+      assert.equal(distributionConfig.DefaultCacheBehavior.TargetOriginId, topLevelDomain);
 
-        assert.isTrue(self.cloudFrontStub.createDistribution.called);
-        var distributionConfig = self.cloudFrontStub.createDistribution.getCall(0).args[0].DistributionConfig;
+      assert.equal(2, distributionConfig.Origins.Quantity);
+      assert.equal(2, distributionConfig.Origins.Items.length);
 
-        assert.equal(distributionConfig.DefaultCacheBehavior.TargetOriginId, self.certificate.commonName);
+      assert.equal(self.domainManagerSettings.cloudFrontOriginDomain, distributionConfig.Origins.Items[0].DomainName);
+      assert.equal(distributionConfig.Origins.Items[1].DomainName, self.domainManagerSettings.cloudFrontCustomErrorsDomain);
 
-        assert.equal(2, distributionConfig.Origins.Quantity);
-        assert.equal(2, distributionConfig.Origins.Items.length);
+      // Assertions about the cache behaviors
+      assert.equal(2, distributionConfig.CacheBehaviors.Quantity);
+      assert.equal(2, distributionConfig.CacheBehaviors.Items.length);
 
-        assert.equal(self.domainManagerSettings.cloudFrontOriginDomain, distributionConfig.Origins.Items[0].DomainName);
-        assert.equal(distributionConfig.Origins.Items[1].DomainName, self.domainManagerSettings.cloudFrontCustomErrorsDomain);
+      assert.equal(distributionConfig.CacheBehaviors.Items[0].PathPattern, self.domainManagerSettings.cloudFrontNoCachePathPattern);
 
-        // Assertions about the cache behaviors
-        assert.equal(2, distributionConfig.CacheBehaviors.Quantity);
-        assert.equal(2, distributionConfig.CacheBehaviors.Items.length);
+      var customErrorsBehavior = distributionConfig.CacheBehaviors.Items[1];
+      assert.equal(customErrorsBehavior.PathPattern, '/__cloudfront-errors/*');
+      assert.equal(customErrorsBehavior.TargetOriginId, topLevelDomain + '-custom-errors');
 
-        assert.equal(distributionConfig.CacheBehaviors.Items[0].PathPattern, self.domainManagerSettings.cloudFrontNoCachePathPattern);
+      var customErrorResponses = distributionConfig.CustomErrorResponses;
+      assert.equal(3, customErrorResponses.Quantity);
+      assert.equal(3, customErrorResponses.Items.length);
 
-        var customErrorsBehavior = distributionConfig.CacheBehaviors.Items[1];
-        assert.equal(customErrorsBehavior.PathPattern, '/__cloudfront-errors/*');
-        assert.equal(customErrorsBehavior.TargetOriginId, self.certificate.commonName + '-custom-errors');
+      assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 502, ResponsePagePath: '/__cloudfront-errors/502.html'}));
+      assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 503}));
+      assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 504}));
 
-        var customErrorResponses = distributionConfig.CustomErrorResponses;
-        assert.equal(3, customErrorResponses.Quantity);
-        assert.equal(3, customErrorResponses.Items.length);
-
-        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 502, ResponsePagePath: '/__cloudfront-errors/502.html'}));
-        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 503}));
-        assert.isTrue(_.any(customErrorResponses.Items, {ErrorCode: 504}));
-
-        assert.equal(self.commonName, uploadedCert.commonName);
-
-        assert.equal(uploadedCert.expires.getTime(), new Date(self.certificateMetadata.Expiration).getTime());
-        assert.equal(uploadedCert.cname, self.createdDistribution.DomainName);
-
-        done();
+      assert.deepEqual(distribution, {
+        distributionId: distributionId,
+        status: 'InProgress',
+        domainName: distributionDomainName
       });
-    });
 
-    it('upload wildcard cert', function(done) {
-      this.commonName = '*.testdomain.com';
-      this.certificate.certificateBody = fs.readFileSync(path.join(__dirname, './fixtures/wildcard.key')).toString();
-
-      this.createdDistribution = {
-        Id: shortid.generate(),
-        Status: 'InProgress',
-        DomainName: shortid.generate() + '.cloudfront.net'
-      };
-
-      this.domainManager.uploadCertificate(this.certificate, function(err, uploadedCert) {
-        if (err) return done(err);
-
-        var uploadCertArg = self.iamStub.uploadServerCertificate.getCall(0).args[0];
-        assert.equal(uploadCertArg.CertificateBody, self.certificate.certificateBody);
-        assert.equal(uploadCertArg.ServerCertificateName.substr(0, 16), '@.testdomain.com');
-        assert.equal(uploadCertArg.Path, '/cloudfront/' + self.domainManagerSettings.serverCertificatePathPrefix + self.commonName + '/');
-        assert.isTrue(self.cloudFrontStub.createDistribution.called);
-        assert.equal(uploadedCert.commonName, self.commonName);
-
-        // The cert name should have replaced the '*' with an '@'
-        assert.equal(uploadedCert.name.substr(0, 16), '@.testdomain.com');
-        assert.equal(uploadedCert.cname, self.createdDistribution.DomainName);
-
-        done();
-      });
-    });
-
-    it('un-parseable x509 cert body', function(done) {
-      this.certificate.certificateBody = 'invalid_cert_body';
-      this.domainManager.uploadCertificate(this.certificate, function(err) {
-        assert.equal(err.code, 'malformedCertificate');
-        assert.isTrue(err.badRequest);
-        done();
-      });
-    });
-
-    it('invalid certificate chain', function(done) {
-      this.iamStub.uploadServerCertificate = function(params, callback) {
-        callback(Error.create('Unable to validate certificate chain', {
-          code: 'MalformedCertificate'
-        }));
-      };
-
-      this.domainManager.uploadCertificate(this.certificate, function(err) {
-        assert.equal(err.code, 'malformedCertificate');
-        assert.isTrue(err.badRequest);
-        done();
-      });
-    });
-
-    it('certificate already exists', function(done) {
-      this.iamStub.uploadServerCertificate = function(params, callback) {
-        callback(Error.create('Server Certificate', {
-          code: 'EntityAlreadyExists',
-        }));
-      };
-
-      this.domainManager.uploadCertificate(this.certificate, function(err) {
-        assert.equal(err.code, 'certificateExists');
-        assert.equal(err.certDomain, 'www.jsngin.com');
-        done();
-      });
-    });
-  });
-
-  describe('transfer domain', function() {
-    it('from shared distro to dedicated SSL distro', function(done) {
-      var domainName = 'test.mydomain.com';
-      var currentDistributionId = self.distributions[0].Distribution.Id;
-      var targetDistributionId = self.distributions[1].Distribution.Id;
-
-      this.distributions[0].Distribution.DistributionConfig.Aliases = {
-        Quantity: 1,
-        Items: [domainName]
-      };
-
-      self.domainManager.transferDomain(domainName, currentDistributionId, targetDistributionId, function(err, newDistributionId) {
-        if (err) return done(err);
-
-        assert.equal(newDistributionId, targetDistributionId);
-        assert.equal(self.cloudFrontStub.getDistribution.callCount, 2);
-        assert.equal(self.cloudFrontStub.updateDistribution.callCount, 2);
-
-        assert.isTrue(self.cloudFrontStub.getDistribution.calledWith({Id: currentDistributionId}));
-        var currentUpdateConfig = self.cloudFrontStub.updateDistribution.getCall(0).args[0].DistributionConfig;
-        assert.equal(currentUpdateConfig.Aliases.Items.indexOf(domainName), -1);
-
-        assert.isTrue(self.cloudFrontStub.getDistribution.calledWith({Id: targetDistributionId}));
-        var targetUpdateConfig = self.cloudFrontStub.updateDistribution.getCall(1).args[0].DistributionConfig;
-        assert.notEqual(targetUpdateConfig.Aliases.Items.indexOf(domainName), -1);
-        done();
-      });
+      done();
     });
   });
 
   it('delete certificate', function(done) {
-    this.iamStub.deleteServerCertificate = sinon.spy(function(params, callback) {
-      callback();
-    });
+    var certificateId = shortid.generate();
 
-    this.cloudFrontStub.deleteDistribution = sinon.spy(function(params, callback) {
-      callback();
-    });
-
-    var certificate = {
-      name: 'www.domain.com',
-      zone: shortid.generate()
-    };
-
-    this.domainManager.deleteCertificate(certificate, function(err) {
+    this.domainManager.deleteCertificate(certificateId, function(err) {
       if (err) return done(err);
 
-      assert.isTrue(self.cloudFrontStub.deleteDistribution.calledWith({Id: certificate.zone}));
-      assert.isTrue(self.iamStub.deleteServerCertificate.calledWith({ServerCertificateName: certificate.name}));
+      assert.isTrue(self.acmStub.deleteCertificate.calledWith({CertificateArn: certificateId}));
+      done();
+    });
+  });
+
+  it('delete CDN distribution', function(done) {
+    var distributionId = shortid.generate();
+
+    this.domainManager.deleteCdnDistribution(distributionId, function(err) {
+      if (err) return done(err);
+      assert.isTrue(self.cloudFrontStub.deleteDistribution.calledWith({Id: distributionId}));
       done();
     });
   });
 
   it('get certificate status', function(done) {
-    var certificate = {
-      zone: shortid.generate()
-    };
+    var certificateId = shortid.generate();
+
+    this.acmStub.describeCertificate = sinon.spy(function(params, callback) {
+      callback(null, {
+        Status: 'PENDING_VALIDATION'
+      });
+    });
+
+    this.domainManager.getCertificateStatus(certificateId, function(err, status) {
+      if (err) return done(err);
+      assert.isTrue(self.acmStub.describeCertificate.calledWith({CertificateArn: certificateId}));
+      assert.equal(status, 'PENDING_VALIDATION');
+      done();
+    });
+  });
+
+  it('get CDN distribution status', function(done) {
+    var distributionId = shortid.generate();
     var distroStatus = 'InProgress';
 
-    this.cloudFrontStub.getDistribution = sinon.spy(function(distributionId, callback) {
+    this.cloudFrontStub.getDistribution = sinon.spy(function(id, callback) {
       callback(null, {
         Distribution: {Status: distroStatus}
       });
     });
 
-    this.domainManager.getCertificateStatus(certificate, function(err, status) {
+    this.domainManager.getCdnDistributionStatus(distributionId, function(err, status) {
       if (err) return done(err);
-      assert.isTrue(self.cloudFrontStub.getDistribution.calledWith({Id: certificate.zone}));
+      assert.isTrue(self.cloudFrontStub.getDistribution.calledWith({Id: distributionId}));
       assert.equal(status, distroStatus);
       done();
     });

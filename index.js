@@ -1,9 +1,7 @@
 var AWS = require('aws-sdk');
 var async = require('async');
 var _ = require('lodash');
-var x509 = require('x509.js');
 var sha1 = require('sha1');
-var dateFormat = require('date-format');
 var distributionConfig = require('./lib/distribution-config');
 var debug = require('debug')('4front:aws-domains');
 
@@ -25,39 +23,19 @@ function DomainManager(settings) {
   });
 }
 
-DomainManager.prototype.register = function(domainName, zone, callback) {
-  var self = this;
-  var distributionId = zone;
+DomainManager.prototype.createCdnDistribution = function(topLevelDomain, certificateId, callback) {
+  // Name the distribution after the topLevelDomain, i.e. "customdomain.com"
+  var config = distributionConfig(this._settings, topLevelDomain, certificateId);
 
-  debug('register domain %s', domainName);
+  this._cloudFront.createDistribution(config, function(err, data) {
+    if (err) return callback(err);
 
-  async.waterfall([
-    function(cb) {
-      // If a dedicated distributionId is specified, get that distribution. Otherwise find a shared
-      // distribution with available CNAME slots.
-      if (distributionId) {
-        self._getDistribution(distributionId, cb);
-      } else {
-        self._findNonSslDistribution(cb);
-      }
-    },
-    function(distro, cb) {
-      if (!distro) {
-        return cb(Error.create('Cannot register domain with non-existent distribution'));
-      }
-
-      var aliases = distro.Distribution.DistributionConfig.Aliases;
-      // Check if the domain name is already in the list of aliases.
-      if (_.contains(aliases.Items, domainName)) {
-        return callback(Error.create('CNAME already exists', {code: 'CNAMEAlreadyExists', log: false}));
-      }
-
-      aliases.Items.push(domainName);
-      aliases.Quantity += 1;
-
-      self._updateDistribution(distro, cb);
-    }
-  ], callback);
+    callback(null, {
+      distributionId: data.Distribution.Id,
+      status: data.Distribution.Status,
+      domainName: data.Distribution.DomainName
+    });
+  });
 };
 
 DomainManager.prototype.unregister = function(domainName, distributionId, callback) {
@@ -99,37 +77,6 @@ DomainManager.prototype.unregister = function(domainName, distributionId, callba
   });
 };
 
-DomainManager.prototype.getCertificateStatus = function(certificate, callback) {
-  this._cloudFront.getDistribution({
-    Id: certificate.zone
-  }, function(err, data) {
-    if (err) return callback(err);
-
-    callback(null, data.Distribution.Status);
-  });
-};
-
-// Transfer domain from one zone to another zone. If the targetZone is null, then
-// find the first available zone for non-SSL domains.
-DomainManager.prototype.transferDomain = function(domainName, currentZone, targetZone, callback) {
-  var currentDistributionId = currentZone;
-  var targetDistributionId = targetZone;
-
-  if (currentDistributionId === targetDistributionId) return callback();
-  debug('transfer domain %s from distribution %s to distribution %s', domainName, currentZone, targetZone);
-
-  var self = this;
-
-  async.waterfall([
-    function(cb) {
-      self.unregister(domainName, currentDistributionId, cb);
-    },
-    function(domain, cb) {
-      self.register(domainName, targetDistributionId, cb);
-    }
-  ], callback);
-};
-
 DomainManager.prototype.requestWildcardCertificate = function(domainName, callback) {
   var params = {
     DomainName: '*.' + domainName,
@@ -151,134 +98,36 @@ DomainManager.prototype.requestWildcardCertificate = function(domainName, callba
   });
 };
 
-DomainManager.prototype.uploadCertificate = function(certificate, options, callback) {
-  var self = this;
-  if (_.isFunction(options)) {
-    callback = options;
-    options = {};
-  }
+// Get the status of the CloudFront CDN distribution
+DomainManager.prototype.getCdnDistributionStatus = function(distributionId, callback) {
+  this._cloudFront.getDistribution({Id: distributionId}, function(err, data) {
+    if (err) return callback(err);
 
-  // Parse the public key
-  var certMetadata;
-  try {
-    certMetadata = x509.parseCert(certificate.certificateBody);
-  } catch (err) {
-    return callback(Error.create('Could not parse certificate body. Ensure the certificate is PEM encoded.', {
-      code: 'malformedCertificate',
-      badRequest: true,
-      log: false
-    }));
-  }
-
-  certificate.commonName = certMetadata.subject.commonName;
-
-  // If this is a wildcard certificate starting with a *, replace the asterisk
-  // with an @ symbol since IAM will not accept a certs with * in the name.
-  if (certificate.commonName.substr(0, 2) === '*.') {
-    certificate.name = '@.' + certificate.commonName.slice(2);
-  } else {
-    certificate.name = certificate.commonName;
-  }
-
-  // Tack a timestamp onto the certname. We need to have two certs with the
-  // same common name during the renewal interval when Cloudfront is migrating
-  // from the old version to the new version to avoid any SSL service interruption.
-  certificate.name += ('-' + dateFormat('yyyy-MM-dd-hh-mm', new Date()));
-
-  if (_.isArray(certMetadata.altNames)) {
-    certificate.altNames = certMetadata.altNames;
-  }
-
-  async.series([
-    function(cb) {
-      debug('create certificate', certificate.name);
-      var params = {
-        Path: '/cloudfront/' + self._settings.serverCertificatePathPrefix + certificate.commonName + '/',
-        ServerCertificateName: certificate.name,
-        CertificateBody: certificate.certificateBody,
-        PrivateKey: certificate.privateKey,
-        CertificateChain: certificate.certificateChain
-      };
-
-      self._iam.uploadServerCertificate(params, function(err, data) {
-        if (err) return cb(err);
-
-        debug('created certificate', JSON.stringify(data));
-
-        _.extend(certificate, {
-          cname: certificate.commonName,
-          status: 'Deployed',
-          certificateId: data.ServerCertificateMetadata.ServerCertificateId,
-          expires: new Date(data.ServerCertificateMetadata.Expiration),
-          uploadDate: new Date(data.ServerCertificateMetadata.UploadDate)
-        });
-
-        cb(null);
-      });
-    },
-    function(cb) {
-      if (options.skipCloudFrontDistribution === true) return cb();
-
-      // Create a new CloudFront distribution
-      debug('creating cloudfront distribution');
-      var config = distributionConfig(self._settings, certificate.commonName, certificate);
-      self._cloudFront.createDistribution(config, function(err, data) {
-        if (err) return cb(err);
-
-        _.extend(certificate, {
-          zone: data.Distribution.Id,
-          status: data.Distribution.Status,
-          cname: data.Distribution.DomainName
-        });
-
-        debug('cloudfront distribution created', data.Distribution.Id);
-        cb();
-      });
-    }
-  ], function(err) {
-    if (err) {
-      // Just use the AWS error message text.
-      if (err.code === 'MalformedCertificate') {
-        return callback(Error.create(err.message, {
-          code: 'malformedCertificate',
-          certName: certificate.name,
-          badRequest: true
-        }));
-      }
-
-      if (err.code === 'EntityAlreadyExists' && err.message.indexOf('Server Certificate') >= 0) {
-        return callback(Error.create('Certficate already exists', {
-          code: 'certificateExists',
-          certName: certificate.name,
-          certDomain: certificate.commonName,
-          badRequest: true
-        }));
-      }
-
-      return callback(err);
-    }
-    callback(null, certificate);
+    callback(null, data.Distribution.Status);
   });
 };
 
-DomainManager.prototype.deleteCertificate = function(certificate, callback) {
-  debug('delete certificate', certificate.name);
-  // Delete the CloudFront distribution
-  var self = this;
-  async.series([
-    function(cb) {
-      if (_.isEmpty(certificate.zone)) return cb();
-      self._cloudFront.deleteDistribution({Id: certificate.zone}, cb);
-    },
-    function(cb) {
-      // cb();
-      // TODO: Instead make a call to self._certManager.deleteCertificate();
-      self._iam.deleteServerCertificate({ServerCertificateName: certificate.name}, function(err) {
-        if (err && err.code !== 'NoSuchEntity') return cb(err);
-        cb();
-      });
-    }
-  ], callback);
+DomainManager.prototype.deleteCdnDistribution = function(distributionId, callback) {
+  debug('delete CloudFront distribution %s', distributionId);
+  this._cloudFront.deleteDistribution({Id: distributionId}, callback);
+};
+
+// Get the status of the certificate
+DomainManager.prototype.getCertificateStatus = function(certificateId, callback) {
+  this._certManager.describeCertificate({CertificateArn: certificateId}, function(err, data) {
+    if (err) return callback(err);
+
+    callback(null, data.Status);
+  });
+};
+
+DomainManager.prototype.deleteCertificate = function(certificateId, callback) {
+  debug('delete certificate', certificateId);
+  // Delete the ACM certificate
+  this._certManager.deleteCertificate({CertificateArn: certificateId}, function(err) {
+    if (err && err.code !== 'NoSuchEntity') return callback(err);
+    callback();
+  });
 };
 
 // Find one of the shared non-SSL CloudFront distributions that has available
