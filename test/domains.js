@@ -122,27 +122,6 @@ describe('AwsDomainManager', function() {
     });
   });
 
-  it('unregisters domain', function(done) {
-    this.distributions[1].Distribution.DistributionConfig.Aliases = {
-      Items: ['one.domain.com', 'two.domain.com', 'three.domain.com'],
-      Quantity: 3
-    };
-
-    var distributionId = this.distributions[1].Distribution.Id;
-    this.domainManager.unregister('two.domain.com', distributionId, function(err) {
-      assert.ok(self.cloudFrontStub.getDistribution.calledWith({Id: distributionId}));
-
-      assert.equal(self.cloudFrontStub.updateDistribution.callCount, 1);
-      assert.equal(self.cloudFrontStub.updateDistribution.getCall(0).args[0].Id, distributionId);
-      assert.deepEqual(self.cloudFrontStub.updateDistribution.getCall(0).args[0].DistributionConfig.Aliases, {
-        Items: ['one.domain.com', 'three.domain.com'],
-        Quantity: 2
-      });
-
-      done();
-    });
-  });
-
   it('createCdnDistribution', function(done) {
     var topLevelDomain = 'jsngin.com';
     var distributionId = shortid.generate();
