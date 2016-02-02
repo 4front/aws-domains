@@ -204,7 +204,10 @@ describe('AwsDomainManager', function() {
 
     this.acmStub.describeCertificate = sinon.spy(function(params, callback) {
       callback(null, {
-        Status: 'PENDING_VALIDATION'
+        Certificate: {
+          CertificateArn: params.CertificateArn,
+          Status: 'PENDING_VALIDATION'
+        }
       });
     });
 

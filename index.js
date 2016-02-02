@@ -70,7 +70,7 @@ DomainManager.prototype.getCertificateStatus = function(certificateId, callback)
   this._certManager.describeCertificate({CertificateArn: certificateId}, function(err, data) {
     if (err) return callback(err);
 
-    callback(null, data.Status);
+    callback(null, data.Certificate.Status);
   });
 };
 

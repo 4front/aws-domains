@@ -3,9 +3,12 @@
 var DomainManager = require('./');
 
 var domains = new DomainManager({
-  cloudFrontOriginDomain: 'aerobatic-prod.elasticbeanstalk.com',
+  cloudFrontOriginDomain: 'origin.aerobatic.io',
   cloudFrontLogBucket: 'aerobatic-cloudfront-logs.s3.amazonaws.com',
-  certificateManagerRegion: 'us-east-1'
+  certificateManagerRegion: 'us-east-1',
+  cloudFrontCustomErrorsDomain: 'aerobatic-media.s3.amazonaws.com',
+  cloudFrontCustomErrorsPath: '/__cloudfront-errors',
+  cloudFrontNoCachePathPattern: '/__nocdn/*'
 });
 
 // domains.uploadServerCertificate({
@@ -20,10 +23,10 @@ var domains = new DomainManager({
 //   }
 // });
 
-domains.requestWildcardCertificate('vonlehman.net', function(err, certId) {
-  if (err) {
-    return console.error(err);
-  }
-
-  console.log(certId);
-});
+// domains.requestWildcardCertificate('vonlehman.net', function(err, certId) {
+//   if (err) {
+//     return console.error(err);
+//   }
+//
+//   console.log(certId);
+// });
