@@ -1,5 +1,6 @@
 var AWS = require('aws-sdk');
 var sha1 = require('sha1');
+var async = require('async');
 var distributionConfig = require('./lib/distribution-config');
 var debug = require('debug')('4front:aws-domains');
 
@@ -62,7 +63,29 @@ DomainManager.prototype.getCdnDistributionStatus = function(distributionId, call
 
 DomainManager.prototype.deleteCdnDistribution = function(distributionId, callback) {
   debug('delete CloudFront distribution %s', distributionId);
-  this._cloudFront.deleteDistribution({Id: distributionId}, callback);
+  var self = this;
+  var existingConfig;
+  async.series([
+    function(cb) {
+      self._cloudFront.getDistributionConfig({Id: distributionId}, function(err, data) {
+        if (err) return cb(err);
+
+        existingConfig = data.DistributionConfig;
+        cb();
+      });
+    },
+    function(cb) {
+      // First update the distribution to free up the certificate
+      delete existingConfig.ViewerCertificate;
+      self._cloudFront.updateDistribution({
+        Id: distributionId,
+        DistributionConfig: existingConfig
+      }, cb);
+    },
+    function(cb) {
+      self._cloudFront.deleteDistribution({Id: distributionId}, cb);
+    }
+  ], callback);
 };
 
 // Get the status of the certificate
