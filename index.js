@@ -62,6 +62,11 @@ DomainManager.prototype.getCdnDistributionStatus = function(distributionId, call
 
 DomainManager.prototype.deleteCdnDistribution = function(distributionId, callback) {
   debug('delete CloudFront distribution %s', distributionId);
+
+  // The ACM certificate is still attached to the CloudFront distribution. We can't delete
+  // the certificate right now because the deleteDistribution action takes time to complete.
+  // Trying to delete the certificate at this point will result in a "still in use" error.
+  // Will need a background job that cleans up unused certificates periodically.
   this._cloudFront.deleteDistribution({Id: distributionId}, callback);
 };
 
