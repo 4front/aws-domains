@@ -91,11 +91,12 @@ DomainManager.prototype.deleteCertificate = function(certificateId, callback) {
 };
 
 DomainManager.prototype.unregisterLegacyDomain = function(domainName, distributionId, callback) {
+  var self = this;
   var config;
   var etag;
   async.series([
     function(cb) {
-      this._cloudFront.getDistributionConfig({Id: distributionId}, function(err, data) {
+      self._cloudFront.getDistributionConfig({Id: distributionId}, function(err, data) {
         if (err && err.code !== 'NoSuchEntity') {
           return cb(err);
         }
@@ -109,7 +110,7 @@ DomainManager.prototype.unregisterLegacyDomain = function(domainName, distributi
       var aliases = distributionConfig.Aliases.Items;
       if (_.contains(aliases, domainName)) {
         aliases = _.without(aliases, domainName);
-        this._cloudFront.updateDistribution({
+        self._cloudFront.updateDistribution({
           Id: distributionId,
           DistributionConfig: config,
           IfMatch: etag
