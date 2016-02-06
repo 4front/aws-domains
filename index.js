@@ -1,4 +1,6 @@
 var AWS = require('aws-sdk');
+var _ = require('lodash');
+var async = require('async');
 var sha1 = require('sha1');
 var distributionConfig = require('./lib/distribution-config');
 var debug = require('debug')('4front:aws-domains');
@@ -85,5 +87,18 @@ DomainManager.prototype.deleteCertificate = function(certificateId, callback) {
   this._certManager.deleteCertificate({CertificateArn: certificateId}, function(err) {
     if (err && err.code !== 'NoSuchEntity') return callback(err);
     callback();
+  });
+};
+
+DomainManager.prototype.legacyDomainRegistered = function(domainName, callback) {
+  var foundDomain;
+  async.eachSeries(this._settings.cloudFrontDistributions, function(distributionId, cb) {
+    if (foundDomain) return cb();
+    this._cloudFront.getDistributionConfig({Id: distributionId}, function(err, data) {
+      if (err) return cb(err);
+      foundDomain = _.contains(data.DistributionConfig.Aliases.Items, domainName);
+    });
+  }, function(err) {
+    callback(err, foundDomain);
   });
 };
