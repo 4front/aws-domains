@@ -40,6 +40,9 @@ describe('AwsDomainManager', function() {
 
         callback(null, distribution);
       }),
+      getDistributionConfig: sinon.spy(function(params, callback) {
+        callback(null, {DistributionConfig: {}});
+      }),
       deleteDistribution: sinon.spy(function(params, callback) {
         callback();
       }),
@@ -194,6 +197,7 @@ describe('AwsDomainManager', function() {
 
     this.domainManager.deleteCdnDistribution(distributionId, function(err) {
       if (err) return done(err);
+
       assert.isTrue(self.cloudFrontStub.deleteDistribution.calledWith({Id: distributionId}));
       done();
     });
