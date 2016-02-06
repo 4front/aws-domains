@@ -91,10 +91,11 @@ DomainManager.prototype.deleteCertificate = function(certificateId, callback) {
 };
 
 DomainManager.prototype.legacyDomainRegistered = function(domainName, callback) {
+  var self = this;
   var foundDomain;
   async.eachSeries(this._settings.cloudFrontDistributions, function(distributionId, cb) {
     if (foundDomain) return cb();
-    this._cloudFront.getDistributionConfig({Id: distributionId}, function(err, data) {
+    self._cloudFront.getDistributionConfig({Id: distributionId}, function(err, data) {
       if (err) return cb(err);
       foundDomain = _.contains(data.DistributionConfig.Aliases.Items, domainName);
     });
