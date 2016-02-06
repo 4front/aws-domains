@@ -90,6 +90,37 @@ DomainManager.prototype.deleteCertificate = function(certificateId, callback) {
   });
 };
 
+DomainManager.prototype.unregisterLegacyDomain = function(domainName, distributionId, callback) {
+  var config;
+  var etag;
+  async.series([
+    function(cb) {
+      this._cloudFront.getDistributionConfig({Id: distributionId}, function(err, data) {
+        if (err && err.code !== 'NoSuchEntity') {
+          return cb(err);
+        }
+        config = data.DistributionConfig;
+        etag = data.ETag;
+        cb();
+      });
+    },
+    function(cb) {
+      if (!config) return cb();
+      var aliases = distributionConfig.Aliases.Items;
+      if (_.contains(aliases, domainName)) {
+        aliases = _.without(aliases, domainName);
+        this._cloudFront.updateDistribution({
+          Id: distributionId,
+          DistributionConfig: config,
+          IfMatch: etag
+        }, cb);
+      } else {
+        cb();
+      }
+    }
+  ], callback);
+};
+
 DomainManager.prototype.legacyDomainRegistered = function(domainName, callback) {
   var self = this;
   var foundDomain;
