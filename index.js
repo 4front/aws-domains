@@ -98,6 +98,7 @@ DomainManager.prototype.legacyDomainRegistered = function(domainName, callback) 
     self._cloudFront.getDistributionConfig({Id: distributionId}, function(err, data) {
       if (err) return cb(err);
       foundDomain = _.contains(data.DistributionConfig.Aliases.Items, domainName);
+      cb();
     });
   }, function(err) {
     callback(err, foundDomain);
