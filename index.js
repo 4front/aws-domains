@@ -91,13 +91,15 @@ DomainManager.prototype.deleteCertificate = function(certificateId, callback) {
 };
 
 DomainManager.prototype.unregisterLegacyDomain = function(domainName, distributionId, callback) {
+  debug('unregister legacy domain %s', domainName);
   var self = this;
   var config;
   var etag;
   async.series([
     function(cb) {
       self._cloudFront.getDistributionConfig({Id: distributionId}, function(err, data) {
-        if (err && err.code !== 'NoSuchEntity') {
+        if (err && err.code !== 'NoSuchDistribution') {
+          debug('could not find distribution %s', distributionId);
           return cb(err);
         }
         config = data.DistributionConfig;
@@ -109,7 +111,8 @@ DomainManager.prototype.unregisterLegacyDomain = function(domainName, distributi
       if (!config) return cb();
       var aliases = config.Aliases.Items;
       if (_.contains(aliases, domainName)) {
-        aliases = _.without(aliases, domainName);
+        config.Aliases.Items = _.without(aliases, domainName);
+        config.Aliases.Quantity = config.Aliases.Items.length;
         self._cloudFront.updateDistribution({
           Id: distributionId,
           DistributionConfig: config,
