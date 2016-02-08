@@ -107,7 +107,7 @@ DomainManager.prototype.unregisterLegacyDomain = function(domainName, distributi
     },
     function(cb) {
       if (!config) return cb();
-      var aliases = distributionConfig.Aliases.Items;
+      var aliases = config.Aliases.Items;
       if (_.contains(aliases, domainName)) {
         aliases = _.without(aliases, domainName);
         self._cloudFront.updateDistribution({
