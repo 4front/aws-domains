@@ -240,4 +240,22 @@ describe('AwsDomainManager', function() {
       done();
     });
   });
+
+  it('resend validation email', function(done) {
+    this.acmStub.resendValidationEmail = sinon.spy(function(params, callback) {
+      callback();
+    });
+
+    var domainName = shortid.generate() + '.net';
+    var certificateId = shortid.generate();
+    this.domainManager.resendValidationEmail(domainName, certificateId, function(err) {
+      if (err) return done(err);
+      assert.isTrue(self.acmStub.resendValidationEmail.calledWith({
+        Domain: domainName,
+        CertificateArn: certificateId,
+        ValidationDomain: domainName
+      }));
+      done();
+    });
+  });
 });

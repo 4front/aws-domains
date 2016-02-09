@@ -139,3 +139,13 @@ DomainManager.prototype.legacyDomainRegistered = function(domainName, callback) 
     callback(err, foundDomain);
   });
 };
+
+DomainManager.prototype.resendValidationEmail = function(domainName, certificateId, callback) {
+  var params = {
+    CertificateArn: certificateId,
+    Domain: domainName,
+    ValidationDomain: domainName
+  };
+
+  this._certManager.resendValidationEmail(params, callback);
+};
