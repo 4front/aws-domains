@@ -91,7 +91,10 @@ DomainManager.prototype.deleteCdnDistribution = function(distributionId, callbac
       _.extend(config, {
         Enabled: false,
         Aliases: {Quantity: 0},
-        ViewerCertificate: null
+        ViewerCertificate: {
+          CloudFrontDefaultCertificate: true,
+          MinimumProtocolVersion: 'TLSv1'
+        }
       });
 
       self._cloudFront.updateDistribution({

@@ -202,7 +202,10 @@ describe('AwsDomainManager', function() {
         Id: distributionId,
         DistributionConfig: sinon.match({
           Enabled: false,
-          ViewerCertificate: null,
+          ViewerCertificate: {
+            CloudFrontDefaultCertificate: true,
+            MinimumProtocolVersion: 'TLSv1'
+          },
           Aliases: {
             Quantity: 0
           }
