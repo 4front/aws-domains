@@ -69,7 +69,38 @@ DomainManager.prototype.deleteCdnDistribution = function(distributionId, callbac
   // the certificate right now because the deleteDistribution action takes time to complete.
   // Trying to delete the certificate at this point will result in a "still in use" error.
   // Will need a background job that cleans up unused certificates periodically.
-  this._cloudFront.deleteDistribution({Id: distributionId}, callback);
+  var self = this;
+  var config;
+  var etag;
+  async.series([
+    function(cb) {
+      self._cloudFront.getDistributionConfig({Id: distributionId}, function(err, data) {
+        if (err && err.code !== 'NoSuchDistribution') {
+          debug('could not find distribution %s', distributionId);
+          return cb(err);
+        }
+        config = data.DistributionConfig;
+        etag = data.ETag;
+        cb();
+      });
+    },
+    function(cb) {
+      if (!config) return cb();
+
+      // Disable the distribution by clearing the aliases and certificate
+      config.Enabled = false;
+      config.Aliases = {
+        Quantity: 0
+      };
+
+      config.ViewerCertificate = {};
+      self._cloudFront.updateDistribution({
+        Id: distributionId,
+        DistributionConfig: config,
+        IfMatch: etag
+      }, cb);
+    }
+  ], callback);
 };
 
 // Get the status of the certificate

@@ -198,7 +198,16 @@ describe('AwsDomainManager', function() {
     this.domainManager.deleteCdnDistribution(distributionId, function(err) {
       if (err) return done(err);
 
-      assert.isTrue(self.cloudFrontStub.deleteDistribution.calledWith({Id: distributionId}));
+      assert.isTrue(self.cloudFrontStub.updateDistribution.calledWith(sinon.match({
+        Id: distributionId,
+        DistributionConfig: sinon.match({
+          Enabled: false,
+          ViewerCertificate: {},
+          Aliases: {
+            Quantity: 0
+          }
+        })
+      })));
       done();
     });
   });
