@@ -202,7 +202,7 @@ describe('AwsDomainManager', function() {
         Id: distributionId,
         DistributionConfig: sinon.match({
           Enabled: false,
-          ViewerCertificate: {},
+          ViewerCertificate: null,
           Aliases: {
             Quantity: 0
           }

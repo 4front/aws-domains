@@ -88,12 +88,12 @@ DomainManager.prototype.deleteCdnDistribution = function(distributionId, callbac
       if (!config) return cb();
 
       // Disable the distribution by clearing the aliases and certificate
-      config.Enabled = false;
-      config.Aliases = {
-        Quantity: 0
-      };
+      _.extend(config, {
+        Enabled: false,
+        Aliases: {Quantity: 0},
+        ViewerCertificate: null
+      });
 
-      config.ViewerCertificate = {};
       self._cloudFront.updateDistribution({
         Id: distributionId,
         DistributionConfig: config,
