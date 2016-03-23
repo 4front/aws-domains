@@ -124,6 +124,35 @@ DomainManager.prototype.deleteCertificate = function(certificateId, callback) {
   });
 };
 
+// List the certificates for a domainName
+DomainManager.prototype.listCertificates = function(domainName, callback) {
+  var self = this;
+
+  var certs = [];
+  var nextToken;
+  async.doUntil(function() {
+    return _.isEmpty(nextToken);
+  }, function(cb) {
+    self._certManager.listCertificates({
+      CertificateStatuses: ['PENDING_VALIDATION', 'ISSUED'],
+      MaxItems: 1000,
+      NextToken: nextToken
+    }, function(err, data) {
+      if (err) return cb(err);
+
+      nextToken = data.NextToken;
+      _.each(data.CertificateSummaryList, function(cert) {
+        if (cert.DomainName === domainName) {
+          certs.push(cert.CertificateArn);
+        }
+      });
+    });
+  }, function(err) {
+    if (err) return callback(err);
+    callback(null, certs);
+  });
+};
+
 DomainManager.prototype.unregisterLegacyDomain = function(domainName, distributionId, callback) {
   debug('unregister legacy domain %s', domainName);
   var self = this;

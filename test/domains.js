@@ -270,4 +270,12 @@ describe('AwsDomainManager', function() {
       done();
     });
   });
+
+  // it('list certificates', function(done) {
+  //   this.acmStub.listCertificates = sinon.spy(function(params, callback) {
+  //     callback(null, {
+  //       Certificate
+  //     })
+  //   });
+  // });
 });
